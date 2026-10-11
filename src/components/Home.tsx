@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUp, ArrowUpRight, Plus } from "lucide-react";
 import { startConversation } from "@/app/actions";
@@ -19,6 +19,8 @@ export default function Home() {
   const [picked, setPicked] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
+  // Set the moment a task is sent: holding Enter fires many key events before React re-renders, so state alone can't stop the repeats.
+  const sending = useRef(false);
 
   const latest = useMemo(
     () => messages.filter((m) => !m.channelId && ((m.role === "dot" && m.text) || (m.role === "card" && m.card?.status === "pending"))).slice(-6).reverse(),
@@ -49,11 +51,17 @@ export default function Home() {
 
   const submit = () => {
     const value = text.trim();
-    if (!value || !target) return;
+    if (!value || !target || sending.current) return;
+    sending.current = true;
     start(async () => {
-      const convId = await startConversation(target.id, value);
-      markRead(target.id);
-      router.push(`/dots/${target.id}?c=${convId}`);
+      try {
+        const convId = await startConversation(target.id, value);
+        markRead(target.id);
+        router.push(`/dots/${target.id}?c=${convId}`);
+      } catch (err) {
+        sending.current = false;
+        throw err;
+      }
     });
   };
 
@@ -80,7 +88,7 @@ export default function Home() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
-                    submit();
+                    if (!e.repeat) submit();
                   }
                 }}
                 placeholder={target ? `Ask ${target.name} to research, browse, plan, or build something…` : "Loading…"}

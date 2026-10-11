@@ -58,6 +58,7 @@ export default function Sidebar() {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [scope, setScope] = useState<"dot" | "all">("dot");
   const [autoOpen, setAutoOpen] = useState(false);
+  const [closedGroups, setClosedGroups] = useState<string[]>([]);
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
@@ -74,6 +75,8 @@ export default function Sidebar() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (v === "all" || v === "dot") setScope(v);
       setAutoOpen(localStorage.getItem("qdot-sidebar-automations") === "1");
+      const closed = JSON.parse(localStorage.getItem("qdot-sidebar-closed") ?? "[]");
+      if (Array.isArray(closed)) setClosedGroups(closed.filter((k): k is string => typeof k === "string"));
     } catch {
       // storage unavailable
     }
@@ -96,6 +99,19 @@ export default function Sidebar() {
       // ignore
     }
   };
+
+  const toggleGroup = (key: string) => {
+    if (key === "auto") return toggleAutomations();
+    const next = closedGroups.includes(key) ? closedGroups.filter((k) => k !== key) : [...closedGroups, key];
+    setClosedGroups(next);
+    try {
+      localStorage.setItem("qdot-sidebar-closed", JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+  /** A group is open unless collapsed (Automations start collapsed); searching opens everything. */
+  const groupOpen = (key: string) => Boolean(q) || (key === "auto" ? autoOpen : !closedGroups.includes(key));
 
   // Save current route so the app can restore it after a mobile background kill
   useEffect(() => {
@@ -150,8 +166,9 @@ export default function Sidebar() {
       else if (c.createdAt >= startOfToday - day) groups[1].items.push(c);
       else groups[2].items.push(c);
     }
+    // Automations are checked all the time, so they sit above the day groups.
     const out = groups.filter((g) => g.items.length);
-    if (autos.length) out.push({ key: "auto", label: "Automations", items: autos });
+    if (autos.length) out.unshift({ key: "auto", label: "Automations", items: autos });
     return out;
   }, [recent]);
 
@@ -169,11 +186,19 @@ export default function Sidebar() {
 
   const closeSearch = () => (setSearching(false), setQ(""));
 
-  // Chats you can see right now (an automation group that is folded away is not selectable)
-  const visibleIds = useMemo(
-    () => sections.filter((sec) => sec.key !== "auto" || autoOpen || Boolean(q)).flatMap((sec) => sec.items.map((c) => c.id)),
-    [sections, autoOpen, q],
-  );
+  // Chats you can see right now; a folded group is not selectable. Automations are selected on their own.
+  const openIds = (auto: boolean) =>
+    sections.filter((sec) => (sec.key === "auto") === auto && groupOpen(sec.key)).flatMap((sec) => sec.items.map((c) => c.id));
+  const visibleIds = useMemo(() => openIds(false), [sections, closedGroups, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const autoIds = useMemo(() => openIds(true), [sections, autoOpen, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const allPicked = (ids: string[]) => ids.length > 0 && ids.every((id) => picked.has(id));
+  const toggleAll = (ids: string[]) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      const every = ids.every((id) => next.has(id));
+      for (const id of ids) every ? next.delete(id) : next.add(id);
+      return next;
+    });
   const stopSelecting = () => (setSelecting(false), setPicked(new Set()), setConfirmBulk(false));
   const toggle = (cid: string) =>
     setPicked((prev) => {
@@ -326,17 +351,15 @@ export default function Sidebar() {
 
       {/* Recent chats */}
       {q && <div className="eyebrow shrink-0 px-4 pt-2 pb-1.5">Chats matching “{q}”</div>}
-      {loaded && visibleIds.length > 0 && (
+      {loaded && visibleIds.length + autoIds.length > 0 && (
         <div className="mx-3 mb-1 flex shrink-0 items-center gap-2 text-[12px]">
           {selecting ? (
             <>
-              <button
-                type="button"
-                className="rounded-full px-2 py-1 text-foreground/70 hover:bg-black/[0.05] hover:text-foreground"
-                onClick={() => setPicked(picked.size === visibleIds.length ? new Set() : new Set(visibleIds))}
-              >
-                {picked.size === visibleIds.length ? "Clear all" : `Select all (${visibleIds.length})`}
-              </button>
+              {visibleIds.length > 0 && (
+                <button type="button" className="rounded-full px-2 py-1 text-foreground/70 hover:bg-black/[0.05] hover:text-foreground" onClick={() => toggleAll(visibleIds)}>
+                  {allPicked(visibleIds) ? "Clear all" : `Select all (${visibleIds.length})`}
+                </button>
+              )}
               <span className="ml-auto text-foreground/50">{picked.size} selected</span>
               <button type="button" className="rounded-full px-2 py-1 text-foreground/70 hover:bg-black/[0.05] hover:text-foreground" onClick={stopSelecting}>
                 Cancel
@@ -369,20 +392,23 @@ export default function Sidebar() {
         )}
         {sections.map((sec) => (
           <div key={sec.key} className="mb-1">
-            {sec.key === "auto" ? (
+            <div className="flex items-center pr-1.5">
               <button
                 type="button"
-                onClick={toggleAutomations}
-                aria-expanded={autoOpen || Boolean(q)}
-                className="flex w-full items-center gap-1.5 px-2.5 pt-2 pb-1 text-left text-[12px] text-foreground/50 hover:text-foreground"
+                onClick={() => toggleGroup(sec.key)}
+                aria-expanded={groupOpen(sec.key)}
+                className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 pt-2 pb-1 text-left text-[12px] text-foreground/50 hover:text-foreground"
               >
-                <ChevronDown className={`size-3.5 transition-transform ${autoOpen || q ? "" : "-rotate-90"}`} strokeWidth={1.75} />
-                Automations · {sec.items.length}
+                <ChevronDown className={`size-3.5 transition-transform ${groupOpen(sec.key) ? "" : "-rotate-90"}`} strokeWidth={1.75} />
+                {sec.label} · {sec.items.length}
               </button>
-            ) : (
-              <div className="px-2.5 pt-2 pb-1 text-[12px] text-foreground/45">{sec.label}</div>
-            )}
-            {(sec.key !== "auto" || autoOpen || Boolean(q)) &&
+              {selecting && sec.key === "auto" && autoIds.length > 0 && (
+                <button type="button" className="shrink-0 rounded-full px-2 py-0.5 text-[12px] text-foreground/60 hover:bg-black/[0.05] hover:text-foreground" onClick={() => toggleAll(autoIds)}>
+                  {allPicked(autoIds) ? "Clear" : "Select all"}
+                </button>
+              )}
+            </div>
+            {groupOpen(sec.key) &&
         sec.items.map((c) => {
           const d = dotById.get(c.dotId);
           if (!d) return null;
