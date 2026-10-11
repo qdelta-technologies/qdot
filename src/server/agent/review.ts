@@ -10,10 +10,32 @@ import type { Rule, RuleDecision } from "@/lib/types";
 
 export type Verdict = { decision: RuleDecision; rule: Rule | null };
 
+const FILLER = new Set(["the", "a", "an", "to", "of", "on", "in", "for", "me", "my", "and", "or", "with", "via", "using", "use", "when", "you", "your", "want", "wants", "it", "is", "from", "this", "that", "do", "dot", "any", "all"]);
+
+/** Lower-case word stems without filler, so "sending emails" and "send the email" compare equal. */
+function stems(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of text.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (!w || FILLER.has(w)) continue;
+    out.add(w.length > 4 ? w.replace(/(ing|ed|es|s)$/, "") : w.replace(/s$/, ""));
+  }
+  return out;
+}
+
+/** Rules whose every key word shows up in the action. Cheap and always available, so rules work even if the AI reviewer is down. */
+function keywordMatches(rules: Rule[], action: string): Rule[] {
+  const have = stems(action);
+  return rules.filter((r) => {
+    const need = stems(r.action);
+    return need.size > 0 && [...need].every((w) => have.has(w));
+  });
+}
+
 export async function review(dotId: string, action: string, fallback: RuleDecision): Promise<Verdict> {
   const rules = repo.rulesFor(dotId);
   if (!rules.length) return { decision: fallback, rule: null };
 
+  const byWords = keywordMatches(rules, action);
   const list = rules.map((r, i) => `${i + 1}. When the dot wants to ${r.action} → ${r.decision === "allow" ? "allow automatically" : r.decision === "ask" ? "ask first" : "never allow"}`).join("\n");
   try {
     const { client, model, stateless } = clientFor((await models()).review);
@@ -61,7 +83,7 @@ Reply with only JSON like {"applying_rules": [1, 3]}, or {"applying_rules": []} 
       raw = res.output_text;
     }
     const parsed = JSON.parse(raw) as { applying_rules?: number[] };
-    const matched = (parsed.applying_rules ?? []).map((n) => rules[n - 1]).filter(Boolean);
+    const matched = [...new Set([...byWords, ...(parsed.applying_rules ?? []).map((n) => rules[n - 1]).filter(Boolean)])];
     if (!matched.length) {
       console.log(`[dots] rules: none of ${rules.length} rule(s) matched "${action.slice(0, 120)}" (reviewer ${model}); using default "${fallback}"`);
       return { decision: fallback, rule: null };
@@ -71,7 +93,13 @@ Reply with only JSON like {"applying_rules": [1, 3]}, or {"applying_rules": []} 
     return { decision: rule.decision, rule };
   } catch (err) {
     console.warn("[dots] rules: reviewer failed, so no rule was applied:", err instanceof Error ? err.message : err);
-    // If the reviewer is unavailable, be conservative for anything not explicitly safe.
+    // The reviewer is down: rules whose key words match the action still apply.
+    if (byWords.length) {
+      const pick = (d: RuleDecision) => byWords.find((r) => r.decision === d);
+      const rule = pick("never") ?? pick("ask") ?? pick("allow")!;
+      return { decision: rule.decision, rule };
+    }
+    // Otherwise be conservative for anything not explicitly safe.
     return { decision: fallback === "allow" ? "allow" : "ask", rule: null };
   }
 }
