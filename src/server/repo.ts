@@ -162,9 +162,18 @@ function touchConversation(convId: string) {
 }
 
 export function deleteConversation(convId: string) {
+  const dotId = getConversation(convId)?.dotId;
   db().prepare("DELETE FROM messages WHERE conversation_id = ?").run(convId);
   db().prepare("DELETE FROM conversations WHERE id = ?").run(convId);
   emit({ type: "conversation_deleted", id: convId });
+  // The chat may have held the only approval card the dot was waiting on; don't leave it "waiting" for nothing.
+  if (dotId) settleWaiting(dotId);
+}
+
+/** A dot marked "waiting" with no approval card left to answer goes back to idle. */
+export function settleWaiting(dotId: string) {
+  const dot = getDot(dotId);
+  if (dot?.status === "waiting" && !pendingCards(dotId).length) updateDot(dotId, { status: "idle" });
 }
 
 export function routeToConversation(dotId: string, convId: string | null) {

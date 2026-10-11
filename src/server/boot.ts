@@ -12,6 +12,7 @@ export function boot() {
   // Nothing is running after a restart; don't leave dots stuck in "working".
   for (const dot of repo.listDots()) {
     if (dot.status === "working") repo.updateDot(dot.id, { status: repo.pendingCards(dot.id).length ? "waiting" : "idle" });
+    else repo.settleWaiting(dot.id); // "waiting" with no card left (its chat was deleted) would otherwise stay stuck
   }
   startScheduler();
   startFileMaintenance();
