@@ -1,5 +1,6 @@
 import "server-only";
 import { clientFor, models } from "./client";
+import { needsCompat } from "./compat";
 import * as repo from "../repo";
 import type { Rule, RuleDecision } from "@/lib/types";
 
@@ -16,29 +17,51 @@ export async function review(dotId: string, action: string, fallback: RuleDecisi
   const list = rules.map((r, i) => `${i + 1}. When the dot wants to ${r.action} → ${r.decision === "allow" ? "allow automatically" : r.decision === "ask" ? "ask first" : "never allow"}`).join("\n");
   try {
     const { client, model, stateless } = clientFor((await models()).review);
-    const res = await client.responses.create({
-      model,
-      ...(stateless ? { store: false } : {}),
-      instructions:
-        "You gate actions of a personal AI agent. Decide which of the user's rules (if any) apply to the pending action. " +
-        "A rule applies only if the action clearly falls under it. Return the numbers of every applying rule; return an empty list if none apply.",
-      input: `Rules:\n${list}\n\nPending action: the dot wants to ${action}`,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "verdict",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: { applying_rules: { type: "array", items: { type: "integer" } } },
-            required: ["applying_rules"],
-            additionalProperties: false,
+    const instructions =
+      "You gate actions of a personal AI agent. Decide which of the user's rules (if any) apply to the pending action. " +
+      "A rule applies only if the action clearly falls under it. Return the numbers of every applying rule; return an empty list if none apply.";
+    const input = `Rules:
+${list}
+
+Pending action: the dot wants to ${action}`;
+    let raw: string;
+    if (needsCompat((await models()).review)) {
+      // Google and Anthropic have no Responses API, so ask through Chat Completions and read the JSON out of the reply.
+      const res = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: instructions },
+          { role: "user", content: `${input}
+
+Reply with only JSON like {"applying_rules": [1, 3]}, or {"applying_rules": []} if none apply.` },
+        ],
+        max_tokens: 200,
+      });
+      raw = res.choices[0]?.message?.content?.match(/\{[\s\S]*\}/)?.[0] ?? "{}";
+    } else {
+      const res = await client.responses.create({
+        model,
+        ...(stateless ? { store: false } : {}),
+        instructions,
+        input,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "verdict",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: { applying_rules: { type: "array", items: { type: "integer" } } },
+              required: ["applying_rules"],
+              additionalProperties: false,
+            },
           },
         },
-      },
-    });
-    const parsed = JSON.parse(res.output_text) as { applying_rules: number[] };
-    const matched = parsed.applying_rules.map((n) => rules[n - 1]).filter(Boolean);
+      });
+      raw = res.output_text;
+    }
+    const parsed = JSON.parse(raw) as { applying_rules?: number[] };
+    const matched = (parsed.applying_rules ?? []).map((n) => rules[n - 1]).filter(Boolean);
     if (!matched.length) {
       console.log(`[dots] rules: none of ${rules.length} rule(s) matched "${action.slice(0, 120)}" (reviewer ${model}); using default "${fallback}"`);
       return { decision: fallback, rule: null };
