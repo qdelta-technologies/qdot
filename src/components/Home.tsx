@@ -19,11 +19,12 @@ export default function Home() {
   const [picked, setPicked] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
+  const [confirmAll, setConfirmAll] = useState(false);
   // Set the moment a task is sent: holding Enter fires many key events before React re-renders, so state alone can't stop the repeats.
   const sending = useRef(false);
 
   const latest = useMemo(
-    () => messages.filter((m) => !m.channelId && ((m.role === "dot" && m.text) || (m.role === "card" && m.card?.status === "pending"))).slice(-6).reverse(),
+    () => messages.filter((m) => !m.channelId && ((m.role === "dot" && m.text) || (m.role === "card" && m.card?.status === "pending"))).slice(-60).reverse(),
     [messages],
   );
 
@@ -48,6 +49,7 @@ export default function Home() {
   }
 
   const target = dots.find((d) => d.id === picked) ?? dots[0];
+  const waitingCards = latest.filter((m) => m.role === "card" && m.card?.status === "pending");
 
   const submit = () => {
     const value = text.trim();
@@ -157,8 +159,36 @@ export default function Home() {
 
         {latest.length > 0 && (
           <section className="mt-10">
-            <h2 className="eyebrow mb-3">Latest from your dots</h2>
-            <div className="surface divide-y divide-black/[0.06]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="eyebrow">Latest from your dots</h2>
+              {waitingCards.length > 0 &&
+                (confirmAll ? (
+                  <span className="flex items-center gap-1.5 text-[12px]">
+                    <span className="text-foreground/60">Deny all {waitingCards.length}?</span>
+                    <button
+                      type="button"
+                      className="btn-quiet h-7 px-2 text-[12px] text-destructive"
+                      disabled={pending}
+                      onClick={() =>
+                        start(async () => {
+                          for (const m of waitingCards) await resolveCard(m.id, "deny");
+                          setConfirmAll(false);
+                        })
+                      }
+                    >
+                      Yes, deny all
+                    </button>
+                    <button type="button" className="btn-quiet h-7 px-2 text-[12px]" onClick={() => setConfirmAll(false)}>
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button type="button" className="btn-quiet h-7 px-2 text-[12px] text-destructive" onClick={() => setConfirmAll(true)}>
+                    Deny all waiting ({waitingCards.length})
+                  </button>
+                ))}
+            </div>
+            <div className="surface max-h-[420px] divide-y divide-black/[0.06] overflow-y-auto">
               {latest.map((m) => {
                 const d = dots.find((x) => x.id === m.dotId);
                 if (!d) return null;
@@ -172,7 +202,7 @@ export default function Home() {
                     {m.role === "card" && m.card?.status === "pending" && (
                       <button
                         type="button"
-                        className="btn-quiet h-7 shrink-0 px-2 text-[12px]"
+                        className="btn-secondary h-7 shrink-0 px-2.5 text-[12px] text-destructive"
                         title="Deny this request without opening it"
                         onClick={(e) => {
                           e.preventDefault();
