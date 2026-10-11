@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUp, ArrowUpRight, Plus } from "lucide-react";
-import { startConversation } from "@/app/actions";
+import { resolveCard, startConversation } from "@/app/actions";
 import { markRead, useStore } from "@/lib/store";
 import { DEFAULT_LOOK } from "@/lib/look";
 import { statusDot, statusLabel, timeAgo } from "@/lib/status";
@@ -169,6 +169,20 @@ export default function Home() {
                     {m.role === "card" && <span className="shrink-0 rounded-xs bg-warning/15 px-1.5 py-0.5 font-mono text-[11px] tracking-wider text-warning uppercase">Needs you</span>}
                     {m.title && <span className="shrink-0 rounded-xs bg-highlight px-1.5 py-0.5 font-mono text-[11px] tracking-wider uppercase">{m.title}</span>}
                     <span className="min-w-0 flex-1 truncate text-body-sm text-foreground/55">{m.role === "card" ? m.card?.title : m.text.replace(/[#*_`>|]/g, "").slice(0, 200)}</span>
+                    {m.role === "card" && m.card?.status === "pending" && (
+                      <button
+                        type="button"
+                        className="btn-quiet h-7 shrink-0 px-2 text-[12px]"
+                        title="Deny this request without opening it"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          start(() => resolveCard(m.id, "deny"));
+                        }}
+                      >
+                        Deny
+                      </button>
+                    )}
                     <span className="shrink-0 font-mono text-[11px] tracking-wider text-foreground/35 uppercase">{timeAgo(m.createdAt)}</span>
                   </Link>
                 );

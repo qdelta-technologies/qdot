@@ -212,6 +212,7 @@ export async function resolveCard(messageId: string, choice: "approve" | "deny" 
   const approved = choice === "approve" || choice === "always";
   const status: CardData["status"] = choice === "answer" ? "answered" : approved ? "approved" : "denied";
   repo.updateMessage(messageId, { card: { ...card, status, answer } });
+  repo.settleWaiting(dot.id); // answering the last open card must not leave the dot labelled "waiting"
   if (choice === "always" && card.ruleAction) repo.addRule({ dotId: dot.id, action: card.ruleAction, decision: "allow" });
 
   const convId = msg.conversationId ?? repo.latestConversationId(dot.id);
