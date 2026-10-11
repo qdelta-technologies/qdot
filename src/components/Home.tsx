@@ -188,7 +188,7 @@ export default function Home() {
                   </button>
                 ))}
             </div>
-            <div className="surface max-h-[420px] divide-y divide-black/[0.06] overflow-y-auto">
+            <div className="surface max-h-[300px] divide-y divide-black/[0.06] overflow-y-auto">
               {latest.map((m) => {
                 const d = dots.find((x) => x.id === m.dotId);
                 if (!d) return null;
