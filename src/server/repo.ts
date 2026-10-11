@@ -432,6 +432,15 @@ export function addMemory(dotId: string, text: string): Memory {
   return mem;
 }
 
+export function updateMemory(memId: string, text: string): Memory | null {
+  db().prepare("UPDATE memories SET text = ? WHERE id = ?").run(text, memId);
+  const row = db().prepare("SELECT * FROM memories WHERE id = ?").get(memId);
+  if (!row) return null;
+  const mem = toMemory(row as Row);
+  emit({ type: "memory", data: mem });
+  return mem;
+}
+
 export function deleteMemory(memId: string) {
   db().prepare("DELETE FROM memories WHERE id = ?").run(memId);
   emit({ type: "memory_deleted", id: memId });
@@ -457,6 +466,15 @@ export function upsertSkill(dotId: string, name: string, description: string, bo
   if (existing) db().prepare("UPDATE skills SET description = ?, body = ? WHERE id = ?").run(description, body, skillId);
   else db().prepare("INSERT INTO skills (id, dot_id, name, description, body, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(skillId, dotId, name, description, body, now());
   const skill = toSkill(db().prepare("SELECT * FROM skills WHERE id = ?").get(skillId)!);
+  emit({ type: "skill", data: skill });
+  return skill;
+}
+
+export function updateSkill(skillId: string, patch: { name: string; description: string; body: string }): Skill | null {
+  db().prepare("UPDATE skills SET name = ?, description = ?, body = ? WHERE id = ?").run(patch.name, patch.description, patch.body, skillId);
+  const row = db().prepare("SELECT * FROM skills WHERE id = ?").get(skillId);
+  if (!row) return null;
+  const skill = toSkill(row as Row);
   emit({ type: "skill", data: skill });
   return skill;
 }

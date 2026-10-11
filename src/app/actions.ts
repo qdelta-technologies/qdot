@@ -153,12 +153,28 @@ export async function addMemory(dotId: string, text: string) {
   if (text.trim()) repo.addMemory(dotId, text.trim());
 }
 
+export async function updateMemory(memoryId: string, text: string) {
+  if (text.trim()) repo.updateMemory(memoryId, text.trim());
+}
+
 export async function deleteMemory(memoryId: string) {
   repo.deleteMemory(memoryId);
 }
 
 export async function saveSkill(dotId: string, name: string, description: string, body: string) {
   if (name.trim() && body.trim()) repo.upsertSkill(dotId, name.trim(), description.trim(), body);
+}
+
+/** Edit a saved skill. Returns an error message, or null once saved. */
+export async function updateSkill(skillId: string, name: string, description: string, body: string): Promise<string | null> {
+  if (!name.trim()) return "Give the skill a name.";
+  if (!body.trim()) return "The skill needs some instructions.";
+  const current = repo.listSkills().find((k) => k.id === skillId);
+  if (!current) return "That skill no longer exists.";
+  const clash = repo.listSkills(current.dotId).find((k) => k.id !== skillId && k.name.toLowerCase() === name.trim().toLowerCase());
+  if (clash) return `Another skill is already called "${clash.name}".`;
+  repo.updateSkill(skillId, { name: name.trim(), description: description.trim(), body });
+  return null;
 }
 
 export async function deleteSkill(skillId: string) {

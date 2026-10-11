@@ -39,6 +39,9 @@ export default function SetupPane({ dot }: { dot: Dot }) {
   const [editingRoutine, setEditingRoutine] = useState<{ id: string; once: boolean } | null>(null);
   const stopEditingRoutine = () => (setEditingRoutine(null), setRoutine({ name: "", instruction: "", schedule: "0 8 * * *" }), setRoutineError(null));
   const [skillOpen, setSkillOpen] = useState<string | null>(null);
+  const [editingMemory, setEditingMemory] = useState<string | null>(null);
+  const [skillEdit, setSkillEdit] = useState<{ id: string; name: string; description: string; body: string } | null>(null);
+  const [skillError, setSkillError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deletePassword, setDeletePassword] = useState("");
@@ -189,6 +192,7 @@ export default function SetupPane({ dot }: { dot: Dot }) {
                 {memories.map((m) => (
                   <div key={m.id} className="flex items-center gap-3 py-2 pr-2 pl-4">
                     <span className="flex-1 text-body-sm">{m.text}</span>
+                    <EditButton label="Edit memory" onClick={() => (setEditingMemory(m.id), setMemory(m.text))} />
                     <RemoveButton label="Forget" onClick={() => start(() => actions.deleteMemory(m.id))} />
                   </div>
                 ))}
@@ -200,13 +204,19 @@ export default function SetupPane({ dot }: { dot: Dot }) {
               className="flex gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                start(() => actions.addMemory(dot.id, memory));
+                start(() => (editingMemory ? actions.updateMemory(editingMemory, memory) : actions.addMemory(dot.id, memory)));
+                setEditingMemory(null);
                 setMemory("");
               }}
             >
               <input className="field" placeholder="Add something it should remember" value={memory} onChange={(e) => setMemory(e.target.value)} />
+              {editingMemory && (
+                <button type="button" className="btn-quiet shrink-0" onClick={() => (setEditingMemory(null), setMemory(""))}>
+                  Cancel
+                </button>
+              )}
               <button className="btn-secondary shrink-0" disabled={!memory.trim()}>
-                Add
+                {editingMemory ? "Save" : "Add"}
               </button>
             </form>
           </div>
@@ -222,8 +232,44 @@ export default function SetupPane({ dot }: { dot: Dot }) {
                       <span className="block text-[14px]">{k.name}</span>
                       <span className="block truncate text-body-sm text-foreground/55">{k.description}</span>
                     </button>
+                    <EditButton
+                      label="Edit skill"
+                      onClick={() => (setSkillEdit({ id: k.id, name: k.name, description: k.description, body: k.body }), setSkillError(null), setSkillOpen(null))}
+                    />
                     <RemoveButton label="Delete skill" onClick={() => start(() => actions.deleteSkill(k.id))} />
                   </div>
+                  {skillEdit?.id === k.id && (
+                    <div className="mt-2 mr-2 space-y-2">
+                      <input className="field" placeholder="Name" value={skillEdit.name} onChange={(e) => setSkillEdit({ ...skillEdit, name: e.target.value })} />
+                      <input className="field" placeholder="What it's for" value={skillEdit.description} onChange={(e) => setSkillEdit({ ...skillEdit, description: e.target.value })} />
+                      <textarea
+                        className="field min-h-40 font-mono text-[12px]"
+                        placeholder="Instructions (markdown)"
+                        value={skillEdit.body}
+                        onChange={(e) => setSkillEdit({ ...skillEdit, body: e.target.value })}
+                      />
+                      {skillError && <p className="text-caption text-destructive">{skillError}</p>}
+                      <div className="flex items-center justify-end gap-2">
+                        <button type="button" className="btn-quiet h-8 px-3 text-[13px]" onClick={() => (setSkillEdit(null), setSkillError(null))}>
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary h-8 px-3 text-[13px]"
+                          disabled={pending}
+                          onClick={() =>
+                            start(async () => {
+                              const err = await actions.updateSkill(skillEdit.id, skillEdit.name, skillEdit.description, skillEdit.body);
+                              setSkillError(err);
+                              if (!err) setSkillEdit(null);
+                            })
+                          }
+                        >
+                          Save skill
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {skillOpen === k.id && <pre className="mt-2 mr-2 rounded-md bg-popover p-3 font-mono text-[12px] whitespace-pre-wrap text-foreground/75">{k.body}</pre>}
                 </div>
               ))}
