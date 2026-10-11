@@ -699,7 +699,20 @@ async function processCalls(dot: Dot, pending: Pending, signal: AbortSignal): Pr
       return pauseFor(dot, pending, { kind: "question", status: "pending", title: String(args.question ?? ""), options: (args.options as string[]) ?? [] });
     }
     if (def.pause === "approval") {
-      return pauseFor(dot, pending, { kind: "approval", status: "pending", title: String(args.action ?? ""), detail: String(args.details ?? ""), tool: def.name });
+      // The dot decided to ask on its own; the user's rules still get the final say.
+      const action = String(args.action ?? "");
+      const verdict = action ? await review(dot.id, action, "ask") : { decision: "ask" as const, rule: null };
+      if (verdict.decision === "allow") {
+        activity(dot.id, "Allowed by your rule", verdict.rule?.action);
+        pending.outputs.push({ type: "function_call_output", call_id: call.call_id, output: `The user's rule says to ${verdict.rule?.action ?? "do this"} without asking, so this is approved. Go ahead.` });
+        continue;
+      }
+      if (verdict.decision === "never") {
+        activity(dot.id, "Blocked by your rule", verdict.rule?.action);
+        pending.outputs.push({ type: "function_call_output", call_id: call.call_id, output: `Not allowed: the user's rule says never ${verdict.rule?.action ?? "do this"}. Don't try to work around it.` });
+        continue;
+      }
+      return pauseFor(dot, pending, { kind: "approval", status: "pending", title: action, detail: String(args.details ?? ""), tool: def.name, ruleAction: verdict.rule?.action });
     }
 
     if (def.pause === "connect") {
