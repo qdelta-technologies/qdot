@@ -47,7 +47,7 @@ export default function MobileBar() {
       }`}
     >
       <MenuButton />
-      <Link href="/" className="mr-auto">
+      <Link href="/" className="mr-auto" onClick={() => { try { localStorage.removeItem("qdot-lastRoute"); } catch {} }}>
         <Wordmark />
       </Link>
       <Link href="/" className="btn-quiet size-9 p-0" aria-label="New chat"

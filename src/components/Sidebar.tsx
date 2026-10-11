@@ -236,7 +236,7 @@ export default function Sidebar() {
       >
       {/* Header */}
       <div className="flex h-14 shrink-0 items-center gap-1.5 px-3 sm:px-4">
-        <Link href="/" className="mr-auto">
+        <Link href="/" className="mr-auto" onClick={() => { try { localStorage.removeItem("qdot-lastRoute"); } catch {} }}>
           <Wordmark />
         </Link>
         <button
