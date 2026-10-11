@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, Pencil, X } from "lucide-react";
 import * as actions from "@/app/actions";
 import { useStore } from "@/lib/store";
 import type { RuleDecision } from "@/lib/types";
@@ -109,6 +109,14 @@ export function RemoveButton({ onClick, label }: { onClick: () => void; label: s
   );
 }
 
+export function EditButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button type="button" className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/35 transition-colors hover:bg-black/[0.05] hover:text-foreground" onClick={onClick} aria-label={label}>
+      <Pencil className="size-3.5" strokeWidth={1.75} />
+    </button>
+  );
+}
+
 const DECISIONS: { value: RuleDecision; label: string; tone: string; hint: string }[] = [
   { value: "allow", label: "Allow", tone: "bg-success/12 text-success", hint: "Allow: does it automatically, without asking." },
   { value: "ask", label: "Ask", tone: "bg-warning/15 text-warning", hint: "Ask: waits for your approval every time." },
@@ -122,7 +130,9 @@ export function RuleEditor({ dotId, name }: { dotId: string | null; name: string
   const rules = useMemo(() => all.filter((r) => r.dotId === dotId), [all, dotId]);
   const [action, setAction] = useState("");
   const [decision, setDecision] = useState<RuleDecision>("ask");
+  const [editing, setEditing] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const resetForm = () => (setEditing(null), setAction(""), setDecision("ask"));
 
   return (
     <div className="space-y-3">
@@ -136,6 +146,7 @@ export function RuleEditor({ dotId, name }: { dotId: string | null; name: string
                   When {name} wants to <span className="text-foreground">{r.action}</span>
                 </span>
                 <span className={`shrink-0 rounded-xs px-1.5 py-0.5 font-mono text-[11px] tracking-wider uppercase ${d.tone}`}>{d.label}</span>
+                <EditButton label="Edit rule" onClick={() => (setEditing(r.id), setAction(r.action), setDecision(r.decision))} />
                 <RemoveButton label="Delete rule" onClick={() => start(() => actions.deleteRule(r.id))} />
               </div>
             );
@@ -147,14 +158,14 @@ export function RuleEditor({ dotId, name }: { dotId: string | null; name: string
         onSubmit={(e) => {
           e.preventDefault();
           if (!action.trim()) return;
-          start(() => actions.addRule(dotId, action, decision));
-          setAction("");
+          start(() => (editing ? actions.updateRule(editing, action, decision) : actions.addRule(dotId, action, decision)));
+          resetForm();
         }}
       >
         <label className="block">
           <span className="eyebrow mb-1.5 block">When {name} wants to</span>
           <input className="field" placeholder="reply to emails for me" value={action} onChange={(e) => setAction(e.target.value)} />
-          {!action && (
+          {!action && !editing && (
             <span className="mt-1.5 flex flex-wrap gap-1.5">
               {RULE_EXAMPLES.map((ex) => (
                 <button key={ex} type="button" onClick={() => setAction(ex)} className="rounded-full border border-black/10 px-2.5 py-0.5 text-[12px] text-foreground/55 transition-colors hover:border-black/25 hover:text-foreground">
@@ -177,8 +188,13 @@ export function RuleEditor({ dotId, name }: { dotId: string | null; name: string
                 {d.label}
               </button>
             ))}
-            <button className="btn-primary ml-auto h-8 px-3 text-[13px]" disabled={pending || !action.trim()}>
-              Add rule
+            {editing && (
+              <button type="button" className="btn-quiet ml-auto h-8 px-3 text-[13px]" onClick={resetForm}>
+                Cancel
+              </button>
+            )}
+            <button className={`btn-primary h-8 px-3 text-[13px] ${editing ? "" : "ml-auto"}`} disabled={pending || !action.trim()}>
+              {editing ? "Save rule" : "Add rule"}
             </button>
           </div>
           <p className="mt-2 text-caption text-foreground/50">{DECISIONS.find((d) => d.value === decision)!.hint}</p>

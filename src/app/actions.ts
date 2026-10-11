@@ -141,6 +141,10 @@ export async function addRule(dotId: string | null, action: string, decision: Ru
   if (action.trim()) repo.addRule({ dotId, action: action.trim(), decision });
 }
 
+export async function updateRule(ruleId: string, action: string, decision: RuleDecision) {
+  if (action.trim()) repo.updateRule(ruleId, { action: action.trim(), decision });
+}
+
 export async function deleteRule(ruleId: string) {
   repo.deleteRule(ruleId);
 }
@@ -168,6 +172,17 @@ export async function addRoutine(dotId: string, name: string, instruction: strin
     kind: "created", routineId: r.id, routineName: r.name, dotId, dotName: repo.getDot(dotId)?.name ?? "", status: "created",
     summary: `Recurring routine created by you: ${r.schedule} (${r.timezone}).`, detail: `Instruction: ${instruction}`,
   });
+  return null;
+}
+
+/** Edit a routine's name, instruction and (for recurring ones) schedule. Returns an error message, or null once saved. */
+export async function updateRoutine(routineId: string, patch: { name: string; instruction: string; schedule?: string }): Promise<string | null> {
+  const r = repo.getRoutine(routineId);
+  if (!r) return "That routine no longer exists.";
+  if (!patch.instruction.trim()) return "Say what it should do each time.";
+  const schedule = r.once ? undefined : patch.schedule?.trim();
+  if (schedule !== undefined && !repo.validSchedule(schedule)) return "That schedule isn't a valid cron expression.";
+  repo.updateRoutine(routineId, { name: patch.name.trim() || r.name, instruction: patch.instruction.trim(), ...(schedule !== undefined ? { schedule } : {}) });
   return null;
 }
 

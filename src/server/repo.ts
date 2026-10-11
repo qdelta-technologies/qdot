@@ -399,6 +399,15 @@ export function addRule(input: { dotId: string | null; action: string; decision:
   return rule;
 }
 
+export function updateRule(ruleId: string, patch: { action: string; decision: RuleDecision }): Rule | null {
+  db().prepare("UPDATE rules SET action = ?, decision = ? WHERE id = ?").run(patch.action, patch.decision, ruleId);
+  const row = db().prepare("SELECT * FROM rules WHERE id = ?").get(ruleId);
+  if (!row) return null;
+  const rule = toRule(row as Row);
+  emit({ type: "rule", data: rule });
+  return rule;
+}
+
 export function deleteRule(ruleId: string) {
   db().prepare("DELETE FROM rules WHERE id = ?").run(ruleId);
   emit({ type: "rule_deleted", id: ruleId });

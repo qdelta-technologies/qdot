@@ -8,7 +8,7 @@ import { useStore } from "@/lib/store";
 import LookEditor from "./LookEditor";
 import { DotTriggers } from "./Triggers";
 import Dot3DLazy from "./Dot3DLazy";
-import { Empty, PageHeader, RemoveButton, RuleEditor, Section } from "./SettingsKit";
+import { EditButton, Empty, PageHeader, RemoveButton, RuleEditor, Section } from "./SettingsKit";
 import ModelPicker from "./ModelPicker";
 import { isProtectedDot } from "@/lib/protectedDots";
 import type { Dot } from "@/lib/types";
@@ -36,6 +36,8 @@ export default function SetupPane({ dot }: { dot: Dot }) {
   const [memory, setMemory] = useState("");
   const [routine, setRoutine] = useState({ name: "", instruction: "", schedule: "0 8 * * *" });
   const [routineError, setRoutineError] = useState<string | null>(null);
+  const [editingRoutine, setEditingRoutine] = useState<{ id: string; once: boolean } | null>(null);
+  const stopEditingRoutine = () => (setEditingRoutine(null), setRoutine({ name: "", instruction: "", schedule: "0 8 * * *" }), setRoutineError(null));
   const [skillOpen, setSkillOpen] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -121,6 +123,10 @@ export default function SetupPane({ dot }: { dot: Dot }) {
                     <button className="btn-quiet" onClick={() => start(() => actions.toggleRoutine(r.id, !r.enabled))}>
                       {r.enabled ? "Pause" : "Resume"}
                     </button>
+                    <EditButton
+                      label="Edit routine"
+                      onClick={() => (setEditingRoutine({ id: r.id, once: r.once }), setRoutine({ name: r.name, instruction: r.instruction, schedule: r.once ? "0 8 * * *" : r.schedule }), setRoutineError(null))}
+                    />
                     <RemoveButton label="Delete routine" onClick={() => start(() => actions.deleteRoutine(r.id))} />
                   </div>
                 ))}
@@ -133,9 +139,11 @@ export default function SetupPane({ dot }: { dot: Dot }) {
               onSubmit={(e) => {
                 e.preventDefault();
                 start(async () => {
-                  const err = await actions.addRoutine(dot.id, routine.name, routine.instruction, routine.schedule);
+                  const err = editingRoutine
+                    ? await actions.updateRoutine(editingRoutine.id, { name: routine.name, instruction: routine.instruction, schedule: routine.schedule })
+                    : await actions.addRoutine(dot.id, routine.name, routine.instruction, routine.schedule);
                   setRoutineError(err);
-                  if (!err) setRoutine({ name: "", instruction: "", schedule: "0 8 * * *" });
+                  if (!err) stopEditingRoutine();
                 });
               }}
             >
@@ -143,8 +151,9 @@ export default function SetupPane({ dot }: { dot: Dot }) {
                 <input className="field" placeholder="Name" value={routine.name} onChange={(e) => setRoutine({ ...routine, name: e.target.value })} />
                 <input className="field" placeholder="What to do each time" value={routine.instruction} onChange={(e) => setRoutine({ ...routine, instruction: e.target.value })} />
               </div>
+              {editingRoutine && <p className="text-caption text-foreground/50">Editing this routine. Save to apply the changes.</p>}
               <div className="flex flex-wrap items-center gap-1.5">
-                {SCHEDULES.map((s) => (
+                {!editingRoutine?.once && SCHEDULES.map((s) => (
                   <button
                     key={s.cron}
                     type="button"
@@ -154,9 +163,14 @@ export default function SetupPane({ dot }: { dot: Dot }) {
                     {s.label}
                   </button>
                 ))}
-                <input className="field h-8 w-36 font-mono text-[12px]" value={routine.schedule} onChange={(e) => setRoutine({ ...routine, schedule: e.target.value })} aria-label="Cron schedule" />
-                <button className="btn-primary ml-auto h-8 px-3 text-[13px]" disabled={pending || !routine.instruction.trim()}>
-                  Add routine
+                {!editingRoutine?.once && <input className="field h-8 w-36 font-mono text-[12px]" value={routine.schedule} onChange={(e) => setRoutine({ ...routine, schedule: e.target.value })} aria-label="Cron schedule" />}
+                {editingRoutine && (
+                  <button type="button" className="btn-quiet ml-auto h-8 px-3 text-[13px]" onClick={stopEditingRoutine}>
+                    Cancel
+                  </button>
+                )}
+                <button className={`btn-primary h-8 px-3 text-[13px] ${editingRoutine ? "" : "ml-auto"}`} disabled={pending || !routine.instruction.trim()}>
+                  {editingRoutine ? "Save routine" : "Add routine"}
                 </button>
               </div>
               {routineError && <p className="text-caption text-destructive">{routineError}</p>}
