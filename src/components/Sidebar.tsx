@@ -139,6 +139,8 @@ export default function Sidebar() {
   }, [drawerOpen]);
 
   const dotById = useMemo(() => new Map(dots.map((d) => [d.id, d])), [dots]);
+  // The dot row reads A to Z, not in the order the dots were created.
+  const sortedDots = useMemo(() => [...dots].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })), [dots]);
 
   // Chats are ordered by when they were started, not by activity, so rows never jump while a dot works.
   // With a dot open the list shows that dot's chats; "All dots" (or searching) shows everything.
@@ -307,7 +309,7 @@ export default function Sidebar() {
                   <span className="skeleton h-2.5 w-9 rounded" />
                 </div>
               ))}
-            {dots.map((d) => (
+            {sortedDots.map((d) => (
               <Link
                 key={d.id}
                 href={`/dots/${d.id}`}

@@ -16,6 +16,7 @@ export default function Home() {
   const dots = useStore((s) => s.dots);
   const loaded = useStore((s) => s.loaded);
   const messages = useStore((s) => s.messages);
+  const sortedDots = useMemo(() => [...dots].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })), [dots]);
   const [picked, setPicked] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
@@ -98,7 +99,7 @@ export default function Home() {
               />
               <div className="flex items-center gap-2 pt-1">
                 <div className="flex flex-1 flex-wrap gap-1.5">
-                  {dots.map((d) => (
+                  {sortedDots.map((d) => (
                     <button
                       key={d.id}
                       type="button"
@@ -133,7 +134,7 @@ export default function Home() {
             </Link>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            {dots.map((d) => (
+            {sortedDots.map((d) => (
               <Link
                 key={d.id}
                 href={`/dots/${d.id}`}
