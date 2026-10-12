@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronDown, LayoutGrid, LogOut, PanelLeftClose, Plus, Search, Settings, SquarePen, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, Folder, LayoutGrid, LogOut, PanelLeftClose, Plus, Search, Settings, SquarePen, Trash2, X } from "lucide-react";
 import { checkAuthStatus, deleteConversation, deleteConversations, lockApp } from "@/app/actions";
 import { markRead, useStore } from "@/lib/store";
 import {
@@ -16,7 +16,10 @@ import {
 import { statusDot, timeAgo } from "@/lib/status";
 import ThemeToggle from "./ThemeToggle";
 import DotOrb from "./DotOrb";
-import type { Conversation, Message } from "@/lib/types";
+import FolderList from "./FolderList";
+import { ALL_FOLDERS, NONE_FOLDER, foldersOf, ownedBy } from "@/lib/dots";
+import { setMe, setOwnerFilter, useMe, useOwnerFilter } from "@/lib/me";
+import type { Conversation, Dot, Message } from "@/lib/types";
 
 export function Wordmark() {
   return (
@@ -50,6 +53,7 @@ export default function Sidebar() {
   const messages = useStore((s) => s.messages);
   const lastRead = useStore((s) => s.lastRead);
   const conversations = useStore((s) => s.conversations);
+  const storedFolders = useStore((s) => s.folders);
   const loaded = useStore((s) => s.loaded);
   const connected = useStore((s) => s.connected);
   const model = useStore((s) => s.computer.model);
@@ -64,6 +68,10 @@ export default function Sidebar() {
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [authEnabled, setAuthEnabled] = useState(false);
   const [, start] = useTransition();
+  const me = useMe();
+  const ownerPick = useOwnerFilter();
+  const [meDraft, setMeDraft] = useState("");
+  const [meSkipped, setMeSkipped] = useState(false);
   const activeDot = pathname.match(/^\/dots\/([^/]+)/)?.[1];
   const drawerOpen = useSidebarOpen();
   const desktopOpen = useDesktopSidebarOpen();
@@ -133,15 +141,41 @@ export default function Sidebar() {
   // The dot row reads A to Z, not in the order the dots were created.
   const sortedDots = useMemo(() => [...dots].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })), [dots]);
 
+  // Folders: names saved on the server plus any a dot uses. Top level is the folder list; opening one narrows the dots row and chats to it.
+  const folders = useMemo(() => foldersOf(dots, storedFolders, me), [dots, storedFolders, me]);
+  const hasFolders = folders.length > 0;
+  const hasUnassigned = dots.some((d) => !d.owner.trim());
+  const pick =
+    ownerPick === ALL_FOLDERS
+      ? ALL_FOLDERS
+      : ownerPick === NONE_FOLDER
+        ? hasUnassigned
+          ? NONE_FOLDER
+          : ""
+        : folders.some((f) => f.toLowerCase() === ownerPick.toLowerCase())
+          ? ownerPick
+          : "";
+  const inList = !q && hasFolders && pick === "";
+  const ownerView = hasFolders && pick ? pick : ALL_FOLDERS;
+  const ownerMatches = (d: Dot) => ownerView === ALL_FOLDERS || d.id === activeDot || (ownerView === NONE_FOLDER ? !d.owner.trim() : ownedBy(d, ownerView));
+  const shownDots = useMemo(() => sortedDots.filter(ownerMatches), [sortedDots, ownerView, activeDot]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Chats are ordered by when they were started, not by activity, so rows never jump while a dot works.
   // With a dot open the list shows that dot's chats; "All dots" (or searching) shows everything.
   const recent = useMemo(() => {
     const query = q.trim().toLowerCase();
     const sorted = [...conversations].sort((a, b) => b.createdAt - a.createdAt);
-    if (!query) return scope === "all" || !activeDot ? sorted : sorted.filter((c) => c.dotId === activeDot);
+    if (!query) {
+      if (scope === "dot" && activeDot) return sorted.filter((c) => c.dotId === activeDot);
+      if (ownerView === ALL_FOLDERS) return sorted;
+      return sorted.filter((c) => {
+        const d = dotById.get(c.dotId);
+        return d ? ownerMatches(d) : true;
+      });
+    }
     const hits = new Set(messages.filter((m) => m.conversationId && m.text.toLowerCase().includes(query)).map((m) => m.conversationId));
     return sorted.filter((c) => c.title.toLowerCase().includes(query) || hits.has(c.id) || dotById.get(c.dotId)?.name.toLowerCase().includes(query));
-  }, [conversations, messages, q, dotById, scope, activeDot]);
+  }, [conversations, messages, q, dotById, scope, activeDot, ownerView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isAutomation = (c: Conversation) => /^(Routine|Trigger) · /.test(c.title);
   const sections = useMemo(() => {
@@ -287,8 +321,51 @@ export default function Sidebar() {
         </div>
       )}
 
+      {/* Who am I? Asked once per browser, and only once someone has an owner to pick from. */}
+      {inList && !me && !meSkipped && (
+        <div className="mx-3 mb-2 shrink-0 rounded-xl border border-black/10 bg-popover/60 p-2.5 dark:border-white/10">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-medium">Which folder is yours?</span>
+            <button type="button" className="text-[11px] text-foreground/45 hover:text-foreground" onClick={() => setMeSkipped(true)}>
+              Not now
+            </button>
+          </div>
+          <p className="mt-0.5 text-[11px] text-foreground/50">Your folder is shown first, as &ldquo;Mine&rdquo;.</p>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {folders.map((o) => (
+              <button key={o} type="button" onClick={() => setMe(o)} className="rounded-full border border-black/10 px-2 py-0.5 text-[12px] text-foreground/70 hover:border-black/25 hover:text-foreground dark:border-white/10">
+                {o}
+              </button>
+            ))}
+          </div>
+          <form
+            className="mt-1.5 flex gap-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (meDraft.trim()) setMe(meDraft.trim().slice(0, 40));
+            }}
+          >
+            <input className="field h-7 flex-1 text-[12px]" placeholder="Or type your folder name" value={meDraft} maxLength={40} onChange={(e) => setMeDraft(e.target.value)} />
+            <button className="btn-primary h-7 px-2.5 text-[12px]" disabled={!meDraft.trim()}>
+              Save
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Inside a folder: the way back to the folder list */}
+      {!q && hasFolders && !inList && (
+        <div className="mx-3 mb-1 flex shrink-0 items-center gap-1.5">
+          <button type="button" onClick={() => setOwnerFilter("")} className="flex size-8 items-center justify-center rounded-full text-foreground/60 transition-colors hover:bg-black/[0.05] hover:text-foreground" aria-label="Back to folders" title="Back to folders">
+            <ChevronLeft className="size-4" strokeWidth={1.75} />
+          </button>
+          <Folder className="size-4 shrink-0 text-foreground/45" strokeWidth={1.75} />
+          <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{ownerView === ALL_FOLDERS ? "All dots" : ownerView === NONE_FOLDER ? "No folder" : ownerView}</span>
+        </div>
+      )}
+
       {/* Your dots: a horizontal row of characters */}
-      {!q && (
+      {!q && !inList && (
         <div className="shrink-0 pb-1">
           <div className="flex gap-0.5 overflow-x-auto px-2.5 pb-1 [scrollbar-width:none]">
             {!loaded &&
@@ -299,7 +376,7 @@ export default function Sidebar() {
                   <span className="skeleton h-2.5 w-9 rounded" />
                 </div>
               ))}
-            {sortedDots.map((d) => (
+            {shownDots.map((d) => (
               <Link
                 key={d.id}
                 href={`/dots/${d.id}`}
@@ -324,7 +401,7 @@ export default function Sidebar() {
         </div>
       )}
 
-      {!q && activeDot && dotById.get(activeDot) && (
+      {!q && !inList && activeDot && dotById.get(activeDot) && (
         <div className="mx-3 mb-1 flex shrink-0 gap-1 rounded-full bg-black/[0.04] p-0.5 text-[12px]" role="tablist" aria-label="Which chats to show">
           {(["dot", "all"] as const).map((v) => (
             <button
@@ -343,7 +420,7 @@ export default function Sidebar() {
 
       {/* Recent chats */}
       {q && <div className="eyebrow shrink-0 px-4 pt-2 pb-1.5">Chats matching “{q}”</div>}
-      {loaded && visibleIds.length + autoIds.length > 0 && (
+      {!inList && loaded && visibleIds.length + autoIds.length > 0 && (
         <div className="mx-3 mb-1 flex shrink-0 items-center gap-2 text-[12px]">
           {selecting ? (
             <>
@@ -368,6 +445,9 @@ export default function Sidebar() {
           )}
         </div>
       )}
+      {inList ? (
+        <FolderList folders={folders} dots={dots} me={me} onOpen={setOwnerFilter} />
+      ) : (
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {!loaded && (
           <div role="status" aria-label="Loading chats" className="space-y-0.5">
@@ -471,10 +551,11 @@ export default function Sidebar() {
         ))}
         {loaded && !recent.length && (
           <p className="px-3 py-6 text-center text-caption text-foreground/45">
-            {q ? "No chats match." : dots.length ? "No chats yet. Pick a dot above to start one." : "Create your first dot to start chatting."}
+            {q ? "No chats match." : ownerView !== ALL_FOLDERS && !shownDots.length ? "No dots in this folder yet. Open a dot and use its folder button (or its Setup page) to move it here." : dots.length ? "No chats yet. Pick a dot above to start one." : "Create your first dot to start chatting."}
           </p>
         )}
       </nav>
+      )}
 
       {selecting && picked.size > 0 && (
         <div className="mx-3 mb-2 flex shrink-0 items-center gap-2 rounded-xl bg-destructive/[0.07] px-3 py-2">

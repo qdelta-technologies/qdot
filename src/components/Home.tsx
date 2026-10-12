@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUp, ArrowUpRight, Plus } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Folder, Plus } from "lucide-react";
 import { resolveCard, startConversation } from "@/app/actions";
 import { markRead, useStore } from "@/lib/store";
 import { DEFAULT_LOOK } from "@/lib/look";
 import { statusDot, statusLabel, timeAgo } from "@/lib/status";
+import { groupByOwner } from "@/lib/dots";
+import { useMe } from "@/lib/me";
 import Dot3DLazy from "./Dot3DLazy";
 import DotOrb from "./DotOrb";
 
@@ -16,7 +18,10 @@ export default function Home() {
   const dots = useStore((s) => s.dots);
   const loaded = useStore((s) => s.loaded);
   const messages = useStore((s) => s.messages);
-  const sortedDots = useMemo(() => [...dots].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })), [dots]);
+  const me = useMe();
+  // My dots first, then each teammate's, then unassigned; A to Z inside each group.
+  const groups = useMemo(() => groupByOwner(dots, me), [dots, me]);
+  const sortedDots = useMemo(() => groups.flatMap((g) => g.dots), [groups]);
   const [picked, setPicked] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
@@ -133,27 +138,41 @@ export default function Home() {
               <Plus className="size-3.5" strokeWidth={1.75} /> New dot
             </Link>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {sortedDots.map((d) => (
-              <Link
-                key={d.id}
-                href={`/dots/${d.id}`}
-                onClick={() => markRead(d.id)}
-                className="surface group flex items-start gap-3.5 p-4 transition-[border-color,box-shadow] hover:border-black/15 hover:shadow-elevated"
-              >
-                <DotOrb look={d.look} status={d.status} size={40} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[15px] font-medium">{d.name}</span>
-                    <ArrowUpRight className="size-4 text-foreground/30 transition-colors group-hover:text-foreground" strokeWidth={1.5} />
-                  </div>
-                  <p className="mt-0.5 line-clamp-2 text-body-sm text-foreground/55">{d.purpose || "General helper"}</p>
-                  <div className="mt-2.5 flex items-center gap-1.5 font-mono text-[11px] tracking-wider text-foreground/45 uppercase">
-                    <span className={`size-1.5 rounded-full ${statusDot(d)}`} />
-                    {d.status === "working" ? d.activity ?? "Working" : statusLabel(d)}
-                  </div>
+          <div className="space-y-6">
+            {groups.map((g) => (
+              <div key={g.owner || "unassigned"}>
+                {g.label && (
+                  <h3 className="mb-2 flex items-center gap-2 text-[13px] font-medium text-foreground/70">
+                    <Folder className="size-3.5 text-foreground/45" strokeWidth={1.75} />
+                    {g.label}
+                    {g.mine && <span className="rounded-full bg-brand/15 px-1.5 py-px text-[10px] tracking-wide text-brand-readable uppercase">You</span>}
+                    <span className="font-mono text-[11px] font-normal text-foreground/40">{g.dots.length}</span>
+                  </h3>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {g.dots.map((d) => (
+                    <Link
+                      key={d.id}
+                      href={`/dots/${d.id}`}
+                      onClick={() => markRead(d.id)}
+                      className="surface group flex items-start gap-3.5 p-4 transition-[border-color,box-shadow] hover:border-black/15 hover:shadow-elevated"
+                    >
+                      <DotOrb look={d.look} status={d.status} size={40} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[15px] font-medium">{d.name}</span>
+                          <ArrowUpRight className="size-4 text-foreground/30 transition-colors group-hover:text-foreground" strokeWidth={1.5} />
+                        </div>
+                        <p className="mt-0.5 line-clamp-2 text-body-sm text-foreground/55">{d.purpose || "General helper"}</p>
+                        <div className="mt-2.5 flex items-center gap-1.5 font-mono text-[11px] tracking-wider text-foreground/45 uppercase">
+                          <span className={`size-1.5 rounded-full ${statusDot(d)}`} />
+                          {d.status === "working" ? d.activity ?? "Working" : statusLabel(d)}
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </section>

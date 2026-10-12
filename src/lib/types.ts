@@ -45,6 +45,7 @@ export type Dot = {
   activeConversationId?: string | null; // which conversation the dot is actively working in
   localAccess: boolean; // may this dot run things on the user's own computer?
   model: string | null; // null = use the default model
+  owner: string; // the teammate this dot belongs to; "" = unassigned
   createdAt: number;
 };
 
@@ -145,6 +146,8 @@ export type Snapshot = {
   apps: ToolkitState[];
   channels: Channel[];
   conversations: Conversation[];
+  /** Folder names saved on purpose (so empty folders exist). Folders in use by dots are listed too, by the client. */
+  folders: string[];
 };
 
 /** A Composio app the user can connect (Gmail, Slack…). */
@@ -192,6 +195,7 @@ export type ServerEvent =
   | { type: "routine_deleted"; id: string }
   | { type: "trigger"; data: AppTrigger }
   | { type: "trigger_deleted"; id: string }
+  | { type: "folders"; data: string[] }
   | { type: "rule"; data: Rule }
   | { type: "rule_deleted"; id: string }
   | { type: "memory"; data: Memory }

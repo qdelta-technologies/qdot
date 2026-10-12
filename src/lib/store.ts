@@ -23,6 +23,7 @@ const EMPTY: State = {
   apps: [],
   channels: [],
   conversations: [],
+  folders: [],
   loaded: false, connected: false, screens: {}, urls: {}, lastRead: {}, toasts: [],
 };
 
@@ -128,6 +129,8 @@ function apply(ev: ServerEvent) {
       return set({ triggers: upsert(state.triggers, ev.data) });
     case "trigger_deleted":
       return set({ triggers: without(state.triggers, ev.id) });
+    case "folders":
+      return set({ folders: ev.data });
     case "rule":
       return set({ rules: upsert(state.rules, ev.data) });
     case "rule_deleted":

@@ -54,6 +54,7 @@ import {
 } from "@/app/actions";
 import type { AppAccount } from "@/server/composio";
 import { useStore } from "@/lib/store";
+import { setMe, useMe } from "@/lib/me";
 import { useTheme } from "@/lib/theme";
 import { openAfter } from "@/lib/popup";
 import { Empty, PageHeader, RemoveButton, RuleEditor, Section } from "./SettingsKit";
@@ -319,6 +320,7 @@ function ProfileSection() {
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
   const [pending, start] = useTransition();
+  const me = useMe();
 
   useEffect(() => {
     getProfile()
@@ -340,6 +342,11 @@ function ProfileSection() {
       description="Your dots use this to know who they work for and what your business does. Leave your name empty and they will not guess one."
     >
       <div className="space-y-2.5">
+        <label className="block rounded-xl border border-black/10 bg-popover/40 p-3 dark:border-white/10">
+          <span className="text-[13px] font-medium">Which folder is yours?</span>
+          <p className="mb-2 text-caption text-foreground/55">Your folder is shown first as &ldquo;Mine&rdquo;, and new dots you create go into it. It is saved in this browser only, so each teammate sets their own.</p>
+          <input className="field" placeholder="Your folder name, exactly as it appears in the sidebar" maxLength={40} value={me} onChange={(e) => setMe(e.target.value)} />
+        </label>
         <div className="grid gap-2 sm:grid-cols-2">
           <input className="field" placeholder="Your name" value={form.name} disabled={!loaded} onChange={(e) => set({ name: e.target.value })} />
           <input className="field" placeholder="Your role, e.g. Co-Founder" value={form.role} disabled={!loaded} onChange={(e) => set({ role: e.target.value })} />

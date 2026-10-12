@@ -6,6 +6,8 @@ import { ArrowRight } from "lucide-react";
 import { createDot } from "@/app/actions";
 import { DEFAULT_LOOK, STARTERS } from "@/lib/look";
 import { markRead } from "@/lib/store";
+import { useMe } from "@/lib/me";
+import OwnerField from "./OwnerField";
 import Dot3DLazy from "./Dot3DLazy";
 import DotOrb from "./DotOrb";
 import LookEditor from "./LookEditor";
@@ -17,13 +19,17 @@ export default function NewDot() {
   const [look, setLook] = useState<Look>(DEFAULT_LOOK);
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
+  const me = useMe();
+  // Until the user types something, the owner is whoever this browser says it is.
+  const [ownerEdit, setOwner] = useState<string | null>(null);
+  const owner = ownerEdit ?? me;
   const placeholder = "Pixel";
   const [pending, start] = useTransition();
   const wide = useMediaQuery("(min-width: 640px)");
 
   const create = () =>
     start(async () => {
-      const id = await createDot({ name: name || placeholder, purpose, look });
+      const id = await createDot({ name: name || placeholder, purpose, look, owner });
       markRead(id);
       router.push(`/dots/${id}`);
     });
@@ -61,6 +67,7 @@ export default function NewDot() {
                 onChange={(e) => setPurpose(e.target.value)}
               />
             </label>
+            <OwnerField value={owner} onChange={setOwner} />
           </div>
 
           <div className="mt-6">

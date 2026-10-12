@@ -88,6 +88,8 @@ function migrate(conn: DatabaseSync) {
   const cols = conn.prepare("PRAGMA table_info(dots)").all().map((c) => (c as { name: string }).name);
   if (!cols.includes("model")) conn.exec("ALTER TABLE dots ADD COLUMN model TEXT");
   if (!cols.includes("box_id")) conn.exec("ALTER TABLE dots ADD COLUMN box_id TEXT");
+  // Which teammate a dot belongs to (free text; empty = unassigned). Used only to organise the shared workspace.
+  if (!cols.includes("owner")) conn.exec("ALTER TABLE dots ADD COLUMN owner TEXT NOT NULL DEFAULT ''");
   const convCols = conn.prepare("PRAGMA table_info(conversations)").all().map((c) => (c as { name: string }).name);
   // Model-facing history for providers that don't keep conversation state (OpenRouter).
   if (convCols.length && !convCols.includes("history")) conn.exec("ALTER TABLE conversations ADD COLUMN history TEXT");

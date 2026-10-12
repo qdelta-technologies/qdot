@@ -7,6 +7,7 @@ import { pauseDot, resumeDot, setDotModel, stopDot } from "@/app/actions";
 import { useStore } from "@/lib/store";
 import { statusDot, statusLine } from "@/lib/status";
 import DotOrb from "./DotOrb";
+import FolderMenu from "./FolderMenu";
 import Chat from "./Chat";
 import ComputerPane from "./ComputerPane";
 import SetupPane from "./SetupPane";
@@ -50,6 +51,7 @@ export default function DotView({ dotId, tab, conversation }: { dotId: string; t
             </span>
           )}
         </Link>
+        <FolderMenu dot={dot} />
 
         <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
           <span className="flex items-center">

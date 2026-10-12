@@ -30,9 +30,11 @@ import type { Attachment, Dot, Look, RuleDecision, TriggerApp, TriggerType } fro
 
 // All mutations go through here; the UI updates from the event stream, not from return values.
 
-export async function createDot(input: { name: string; purpose: string; look: Look }): Promise<string> {
+const cleanOwner = (v: string) => v.trim().replace(/\s+/g, " ").slice(0, 40);
+
+export async function createDot(input: { name: string; purpose: string; look: Look; owner?: string }): Promise<string> {
   const name = input.name.trim() || "Dot";
-  const dot = repo.createDot({ name, purpose: input.purpose.trim(), look: input.look });
+  const dot = repo.createDot({ name, purpose: input.purpose.trim(), look: input.look, owner: cleanOwner(input.owner ?? "") });
   repo.addMessage({
     dotId: dot.id,
     role: "dot",
@@ -42,15 +44,31 @@ export async function createDot(input: { name: string; purpose: string; look: Lo
 }
 
 /** Returns an error message when the change was refused (core dots keep their names), or null once saved. */
-export async function updateDot(dotId: string, patch: Partial<Pick<Dot, "name" | "purpose" | "instructions" | "look">>): Promise<string | null> {
+export async function updateDot(dotId: string, patch: Partial<Pick<Dot, "name" | "purpose" | "instructions" | "look" | "owner">>): Promise<string | null> {
   const dot = repo.getDot(dotId);
   const newName = patch.name?.trim().toLowerCase();
   if (dot && newName !== undefined && newName !== dot.name.trim().toLowerCase()) {
     if (isProtectedDot(dot.name)) return `${dot.name} is a core dot and can't be renamed.`;
     if (isProtectedDot(newName)) return `"${patch.name?.trim()}" is reserved for a core dot. Pick another name.`;
   }
-  repo.updateDot(dotId, patch);
+  repo.updateDot(dotId, patch.owner !== undefined ? { ...patch, owner: cleanOwner(patch.owner) } : patch);
   return null;
+}
+
+// ---------- folders ----------
+
+export async function createFolder(name: string): Promise<void> {
+  const clean = cleanOwner(name);
+  if (clean) repo.addFolder(clean);
+}
+
+export async function renameFolder(from: string, to: string): Promise<void> {
+  const clean = cleanOwner(to);
+  if (clean) repo.renameFolder(from, clean);
+}
+
+export async function deleteFolder(name: string): Promise<void> {
+  repo.removeFolder(name);
 }
 
 /** Returns an error message when the delete was refused, or null once the dot is gone. */

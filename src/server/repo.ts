@@ -28,6 +28,7 @@ const toDot = (r: Row): Dot => ({
   activeConversationId: convRouting.get(r.id as string) ?? null,
   localAccess: r.local_access === 1,
   model: (r.model as string) ?? null,
+  owner: (r.owner as string) ?? "",
   createdAt: r.created_at as number,
 });
 
@@ -45,10 +46,10 @@ export function findDotByName(name: string): Dot | null {
   return r ? toDot(r) : null;
 }
 
-export function createDot(input: { name: string; purpose: string; instructions?: string; look: Look }): Dot {
+export function createDot(input: { name: string; purpose: string; instructions?: string; look: Look; owner?: string }): Dot {
   const dotId = id("dot");
-  db().prepare("INSERT INTO dots (id, name, purpose, instructions, look, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(dotId, input.name, input.purpose, input.instructions ?? "", JSON.stringify(input.look), now());
+  db().prepare("INSERT INTO dots (id, name, purpose, instructions, look, owner, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(dotId, input.name, input.purpose, input.instructions ?? "", JSON.stringify(input.look), input.owner ?? "", now());
   const dot = getDot(dotId)!;
   emit({ type: "dot", data: dot });
   return dot;
@@ -56,7 +57,7 @@ export function createDot(input: { name: string; purpose: string; instructions?:
 
 export function updateDot(
   dotId: string,
-  patch: Partial<Pick<Dot, "name" | "purpose" | "instructions" | "look" | "status" | "localAccess" | "model">>,
+  patch: Partial<Pick<Dot, "name" | "purpose" | "instructions" | "look" | "status" | "localAccess" | "model" | "owner">>,
 ): Dot | null {
   const cols: string[] = [];
   const vals: (string | number | null)[] = [];
@@ -79,6 +80,10 @@ export function updateDot(
   if (patch.status !== undefined) {
     cols.push("status = ?");
     vals.push(patch.status);
+  }
+  if (patch.owner !== undefined) {
+    cols.push("owner = ?");
+    vals.push(patch.owner);
   }
   if (patch.model !== undefined) {
     cols.push("model = ?");
@@ -382,6 +387,49 @@ export function channelMessages(limit = 300): Message[] {
     .prepare("SELECT * FROM (SELECT * FROM messages WHERE channel_id IS NOT NULL ORDER BY created_at DESC LIMIT ?) ORDER BY created_at")
     .all(limit)
     .map(toMessage);
+}
+
+// ---------- folders ----------
+// A folder is a name a dot's `owner` can have. Names saved here exist even while empty; the client also shows any name a dot uses.
+
+const FOLDERS_KEY = "folders";
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+export function listFolders(): string[] {
+  try {
+    const v = JSON.parse(getSetting(FOLDERS_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveFolders(list: string[]): string[] {
+  setSetting(FOLDERS_KEY, JSON.stringify(list));
+  emit({ type: "folders", data: list });
+  return list;
+}
+
+export function addFolder(name: string): string[] {
+  const list = listFolders();
+  return list.some((f) => sameName(f, name)) ? list : saveFolders([...list, name]);
+}
+
+/** Renames a folder and moves its dots with it. Renaming onto an existing folder merges them. */
+export function renameFolder(from: string, to: string): string[] {
+  const moved = listDots().filter((d) => sameName(d.owner, from));
+  if (moved.length) db().prepare("UPDATE dots SET owner = ? WHERE lower(trim(owner)) = lower(trim(?))").run(to, from);
+  for (const d of moved) emit({ type: "dot", data: getDot(d.id)! });
+  const list = listFolders().filter((f) => !sameName(f, from));
+  return saveFolders(list.some((f) => sameName(f, to)) ? list : [...list, to]);
+}
+
+/** Deletes a folder. Its dots are kept and simply have no folder. */
+export function removeFolder(name: string): string[] {
+  const moved = listDots().filter((d) => sameName(d.owner, name));
+  if (moved.length) db().prepare("UPDATE dots SET owner = '' WHERE lower(trim(owner)) = lower(trim(?))").run(name);
+  for (const d of moved) emit({ type: "dot", data: getDot(d.id)! });
+  return saveFolders(listFolders().filter((f) => !sameName(f, name)));
 }
 
 // ---------- rules ----------
