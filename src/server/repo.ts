@@ -388,7 +388,7 @@ export function channelMessages(limit = 300): Message[] {
 
 const toRule = (r: Row): Rule => ({
   id: r.id as string, dotId: (r.dot_id as string) ?? null, action: r.action as string,
-  decision: r.decision as RuleDecision, createdAt: r.created_at as number,
+  decision: r.decision as RuleDecision, createdAt: r.created_at as number, updatedAt: (r.updated_at as number | null) ?? null,
 });
 
 export function listRules(): Rule[] {
@@ -409,7 +409,7 @@ export function addRule(input: { dotId: string | null; action: string; decision:
 }
 
 export function updateRule(ruleId: string, patch: { action: string; decision: RuleDecision }): Rule | null {
-  db().prepare("UPDATE rules SET action = ?, decision = ? WHERE id = ?").run(patch.action, patch.decision, ruleId);
+  db().prepare("UPDATE rules SET action = ?, decision = ?, updated_at = ? WHERE id = ?").run(patch.action, patch.decision, now(), ruleId);
   const row = db().prepare("SELECT * FROM rules WHERE id = ?").get(ruleId);
   if (!row) return null;
   const rule = toRule(row as Row);

@@ -123,7 +123,9 @@ const DECISIONS: { value: RuleDecision; label: string; tone: string; hint: strin
   { value: "never", label: "Never", tone: "bg-destructive/10 text-destructive", hint: "Never: blocked completely." },
 ];
 
-const RULE_EXAMPLES = ["send emails", "reply to emails", "delete files", "post on social media"];
+const ruleTime = (ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+const RULE_EXAMPLES =["send emails", "reply to emails", "delete files", "post on social media"];
 
 export function RuleEditor({ dotId, name }: { dotId: string | null; name: string }) {
   const all = useStore((s) => s.rules);
@@ -144,6 +146,10 @@ export function RuleEditor({ dotId, name }: { dotId: string | null; name: string
               <div key={r.id} className="flex items-center gap-3 py-2 pr-2 pl-4">
                 <span className="min-w-0 flex-1 text-body-sm text-foreground/60">
                   When {name} wants to <span className="text-foreground">{r.action}</span>
+                  <span className="mt-0.5 block text-caption text-foreground/45">
+                    Added {ruleTime(r.createdAt)}
+                    {r.updatedAt ? ` · Updated ${ruleTime(r.updatedAt)}` : ""}
+                  </span>
                 </span>
                 <span className={`shrink-0 rounded-xs px-1.5 py-0.5 font-mono text-[11px] tracking-wider uppercase ${d.tone}`}>{d.label}</span>
                 <EditButton label="Edit rule" onClick={() => (setEditing(r.id), setAction(r.action), setDecision(r.decision))} />

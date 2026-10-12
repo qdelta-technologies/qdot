@@ -90,7 +90,7 @@ export type Conversation = { id: string; dotId: string; title: string; createdAt
 export type Channel = { id: string; name: string; leadId: string; memberIds: string[]; createdAt: number };
 
 export type RuleDecision = "allow" | "ask" | "never";
-export type Rule = { id: string; dotId: string | null; action: string; decision: RuleDecision; createdAt: number };
+export type Rule = { id: string; dotId: string | null; action: string; decision: RuleDecision; createdAt: number; /** Set when the rule is edited; null if never changed. */ updatedAt: number | null };
 export type Memory = { id: string; dotId: string; text: string; createdAt: number };
 export type Skill = { id: string; dotId: string; name: string; description: string; body: string; createdAt: number };
 /** A Composio trigger: when something happens in one of the user's apps, a dot runs an instruction. */

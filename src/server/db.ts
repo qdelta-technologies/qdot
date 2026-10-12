@@ -83,6 +83,8 @@ function migrate(conn: DatabaseSync) {
   const statusCols = conn.prepare("PRAGMA table_info(open_model_status)").all().map((c) => (c as { name: string }).name);
   if (!statusCols.includes("context_length")) conn.exec("ALTER TABLE open_model_status ADD COLUMN context_length INTEGER");
   if (!statusCols.includes("parameters")) conn.exec("ALTER TABLE open_model_status ADD COLUMN parameters TEXT");
+  const ruleCols = conn.prepare("PRAGMA table_info(rules)").all().map((c) => (c as { name: string }).name);
+  if (!ruleCols.includes("updated_at")) conn.exec("ALTER TABLE rules ADD COLUMN updated_at INTEGER");
   const cols = conn.prepare("PRAGMA table_info(dots)").all().map((c) => (c as { name: string }).name);
   if (!cols.includes("model")) conn.exec("ALTER TABLE dots ADD COLUMN model TEXT");
   if (!cols.includes("box_id")) conn.exec("ALTER TABLE dots ADD COLUMN box_id TEXT");
