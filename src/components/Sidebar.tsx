@@ -113,15 +113,6 @@ export default function Sidebar() {
   /** A group is open unless collapsed (Automations start collapsed); searching opens everything. */
   const groupOpen = (key: string) => Boolean(q) || (key === "auto" ? autoOpen : !closedGroups.includes(key));
 
-  // Save current route so the app can restore it after a mobile background kill
-  useEffect(() => {
-    if (pathname === "/" || pathname.startsWith("/login")) return;
-    try {
-      const full = pathname + (activeConv ? `?c=${activeConv}` : "");
-      localStorage.setItem("qdot-lastRoute", full);
-    } catch { /* localStorage unavailable */ }
-  }, [pathname, activeConv]);
-
   // Keyboard shortcut: Ctrl+B or Cmd+B to toggle sidebar
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -238,7 +229,7 @@ export default function Sidebar() {
       >
       {/* Header */}
       <div className="flex h-14 shrink-0 items-center gap-1.5 px-3 sm:px-4">
-        <Link href="/" className="mr-auto" onClick={() => { try { localStorage.removeItem("qdot-lastRoute"); } catch {} }}>
+        <Link href="/" className="mr-auto">
           <Wordmark />
         </Link>
         <button
@@ -254,7 +245,6 @@ export default function Sidebar() {
           className="flex size-9 items-center justify-center rounded-full border border-black/10 text-foreground/70 transition-colors hover:border-black/25 hover:text-foreground"
           title="New chat"
           aria-label="New chat"
-          onClick={() => { try { localStorage.removeItem("qdot-lastRoute"); } catch {} }}
         >
           <SquarePen className="size-4" strokeWidth={1.75} />
         </Link>

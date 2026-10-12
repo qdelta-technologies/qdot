@@ -47,11 +47,10 @@ export default function MobileBar() {
       }`}
     >
       <MenuButton />
-      <Link href="/" className="mr-auto" onClick={() => { try { localStorage.removeItem("qdot-lastRoute"); } catch {} }}>
+      <Link href="/" className="mr-auto">
         <Wordmark />
       </Link>
-      <Link href="/" className="btn-quiet size-9 p-0" aria-label="New chat"
-        onClick={() => { try { localStorage.removeItem("qdot-lastRoute"); } catch {} }}>
+      <Link href="/" className="btn-quiet size-9 p-0" aria-label="New chat">
         <SquarePen className="size-4" strokeWidth={1.75} />
       </Link>
     </div>
