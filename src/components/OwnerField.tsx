@@ -19,8 +19,8 @@ export default function OwnerField({ value, onChange }: { value: string; onChang
 
   return (
     <label className="block">
-      <span className="eyebrow mb-1.5 block">Folder</span>
-      <input className="field" value={value} maxLength={40} onChange={(e) => onChange(e.target.value)} placeholder="Which folder? e.g. your name, Sales, Research" />
+      <span className="eyebrow mb-1.5 block">Project</span>
+      <input className="field" value={value} maxLength={40} onChange={(e) => onChange(e.target.value)} placeholder="Which project? e.g. your name, Sales, Research" />
       {names.length > 0 && (
         <span className="mt-1.5 flex flex-wrap gap-1.5">
           {names.map((n) => (

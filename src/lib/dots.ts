@@ -45,6 +45,6 @@ export function groupByOwner(dots: Dot[], me: string): OwnerGroup[] {
   }
   groups.sort((a, b) => Number(b.mine) - Number(a.mine));
   const unassigned = dots.filter((d) => !d.owner.trim()).sort(byName);
-  if (unassigned.length) groups.push({ owner: "", label: groups.length ? "No folder" : "", mine: false, dots: unassigned });
+  if (unassigned.length) groups.push({ owner: "", label: groups.length ? "No project" : "", mine: false, dots: unassigned });
   return groups;
 }

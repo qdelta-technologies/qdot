@@ -33,14 +33,14 @@ export default function FolderMenu({ dot }: { dot: Dot }) {
       <button
         type="button"
         className="btn-quiet h-8 cursor-pointer gap-1.5 px-2 text-[13px]"
-        title="Move this dot to a folder"
-        aria-label="Folder"
+        title="Move this dot to a project"
+        aria-label="Project"
         aria-expanded={open}
         disabled={pending}
         onClick={() => setOpen((o) => !o)}
       >
         <Folder className="size-3.5" strokeWidth={1.75} />
-        <span className="max-w-32 truncate">{current || "No folder"}</span>
+        <span className="max-w-32 truncate">{current || "No project"}</span>
         <ChevronDown className="size-3 text-foreground/40" strokeWidth={1.75} />
       </button>
       {open && (
@@ -57,7 +57,7 @@ export default function FolderMenu({ dot }: { dot: Dot }) {
             ))}
             {current && (
               <button type="button" onClick={() => move("")} className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-foreground/60 hover:bg-black/[0.05] dark:hover:bg-white/[0.08]">
-                Take out of folder
+                Take out of project
               </button>
             )}
             <form
@@ -68,7 +68,7 @@ export default function FolderMenu({ dot }: { dot: Dot }) {
               }}
             >
               <FolderPlus className="ml-1.5 size-3.5 shrink-0 text-foreground/50" strokeWidth={1.75} />
-              <input className="h-7 min-w-0 flex-1 bg-transparent px-1 text-[13px] outline-none placeholder:text-foreground/40" placeholder="New folder name" maxLength={40} value={draft} onChange={(e) => setDraft(e.target.value)} />
+              <input className="h-7 min-w-0 flex-1 bg-transparent px-1 text-[13px] outline-none placeholder:text-foreground/40" placeholder="New project name" maxLength={40} value={draft} onChange={(e) => setDraft(e.target.value)} />
               <button className="btn-primary h-6 px-2 text-[12px]" disabled={!draft.trim()}>
                 Add
               </button>

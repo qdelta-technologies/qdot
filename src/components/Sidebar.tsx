@@ -328,11 +328,11 @@ export default function Sidebar() {
       {/* Inside a folder: the way back to the folder list */}
       {!q && hasFolders && !inList && (
         <div className="mx-3 mb-1 flex shrink-0 items-center gap-1.5">
-          <button type="button" onClick={() => setOwnerFilter("")} className="flex size-8 cursor-pointer items-center justify-center rounded-full text-foreground/60 transition-colors hover:bg-black/[0.05] hover:text-foreground" aria-label="Back to folders" title="Back to folders">
+          <button type="button" onClick={() => setOwnerFilter("")} className="flex size-8 cursor-pointer items-center justify-center rounded-full text-foreground/60 transition-colors hover:bg-black/[0.05] hover:text-foreground" aria-label="Back to projects" title="Back to projects">
             <ChevronLeft className="size-4" strokeWidth={1.75} />
           </button>
           <Folder className="size-4 shrink-0 text-foreground/45" strokeWidth={1.75} />
-          <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{ownerView === ALL_FOLDERS ? "All dots" : ownerView === NONE_FOLDER ? "No folder" : ownerView}</span>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{ownerView === ALL_FOLDERS ? "All dots" : ownerView === NONE_FOLDER ? "No project" : ownerView}</span>
         </div>
       )}
 
@@ -520,7 +520,7 @@ export default function Sidebar() {
         ))}
         {loaded && !recent.length && (
           <p className="px-3 py-6 text-center text-caption text-foreground/45">
-            {q ? "No chats match." : ownerView !== ALL_FOLDERS && !shownDots.length ? "No dots in this folder yet. Open a dot and use its folder button (or its Setup page) to move it here." : dots.length ? "No chats yet. Pick a dot above to start one." : "Create your first dot to start chatting."}
+            {q ? "No chats match." : ownerView !== ALL_FOLDERS && !shownDots.length ? "No dots in this project yet. Open a dot and use its project button (or its Setup page) to move it here." : dots.length ? "No chats yet. Pick a dot above to start one." : "Create your first dot to start chatting."}
           </p>
         )}
       </nav>

@@ -7,7 +7,7 @@ import { ALL_FOLDERS, NONE_FOLDER, ownedBy } from "@/lib/dots";
 import type { Dot } from "@/lib/types";
 import DotOrb from "./DotOrb";
 
-/** The sidebar's top level: your folders, with + New project. Opening one shows its dots and chats. */
+/** The sidebar's top level: your projects, with + New project. Opening one shows its dots and chats. */
 export default function FolderList({
   folders,
   dots,
@@ -65,8 +65,8 @@ export default function FolderList({
     if (opts.manage && removing === key) {
       return (
         <div key={key} className="my-0.5 rounded-xl bg-destructive/[0.06] px-3 py-2.5">
-          <p className="text-[13px] text-destructive">Delete the folder “{label}”?</p>
-          <p className="mt-0.5 text-[12px] text-foreground/55">Its {list.length === 1 ? "dot stays" : "dots stay"} and just {list.length === 1 ? "has" : "have"} no folder.</p>
+          <p className="text-[13px] text-destructive">Delete the project “{label}”?</p>
+          <p className="mt-0.5 text-[12px] text-foreground/55">Its {list.length === 1 ? "dot stays" : "dots stay"} and just {list.length === 1 ? "has" : "have"} no project.</p>
           <div className="mt-2 flex gap-1.5">
             <button
               className="btn-quiet h-7 px-2 text-[12px] text-destructive"
@@ -75,7 +75,7 @@ export default function FolderList({
                 start(() => deleteFolder(key));
               }}
             >
-              Delete folder
+              Delete project
             </button>
             <button className="btn-quiet h-7 px-2 text-[12px]" onClick={() => setRemoving(null)}>
               Cancel
@@ -114,10 +114,10 @@ export default function FolderList({
         </button>
         {opts.manage && (
           <span className="absolute top-1/2 right-1.5 hidden -translate-y-1/2 items-center group-hover:flex [@media(hover:none)]:flex">
-            <button className="btn-quiet size-7 cursor-pointer p-0 text-foreground/45 [@media(hover:none)]:size-9" aria-label={`Rename ${label}`} title="Rename folder" onClick={() => (setRename(key), setEditing(key))}>
+            <button className="btn-quiet size-7 cursor-pointer p-0 text-foreground/45 [@media(hover:none)]:size-9" aria-label={`Rename ${label}`} title="Rename project" onClick={() => (setRename(key), setEditing(key))}>
               <Pencil className="size-3.5" strokeWidth={1.75} />
             </button>
-            <button className="btn-quiet size-7 cursor-pointer p-0 text-foreground/45 hover:text-destructive [@media(hover:none)]:size-9" aria-label={`Delete ${label}`} title="Delete folder" onClick={() => setRemoving(key)}>
+            <button className="btn-quiet size-7 cursor-pointer p-0 text-foreground/45 hover:text-destructive [@media(hover:none)]:size-9" aria-label={`Delete ${label}`} title="Delete project" onClick={() => setRemoving(key)}>
               <Trash2 className="size-3.5" strokeWidth={1.75} />
             </button>
           </span>
@@ -127,7 +127,7 @@ export default function FolderList({
   };
 
   return (
-    <nav className="qdot-pane-left qdot-stagger min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Folders">
+    <nav className="qdot-pane-left qdot-stagger min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Projects">
       <div className="mb-1 px-1">
         {adding ? (
           <form
@@ -156,7 +156,7 @@ export default function FolderList({
 
       {row(ALL_FOLDERS, "All dots", dots, { icon: "open" })}
       {folders.map((f) => row(f, f, dots.filter((d) => ownedBy(d, f)), { mine: !!me && f.toLowerCase() === me.toLowerCase(), manage: true }))}
-      {loose.length > 0 && row(NONE_FOLDER, "No folder", loose)}
+      {loose.length > 0 && row(NONE_FOLDER, "No project", loose)}
     </nav>
   );
 }

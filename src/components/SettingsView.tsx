@@ -343,9 +343,9 @@ function ProfileSection() {
     >
       <div className="space-y-2.5">
         <label className="block rounded-xl border border-black/10 bg-popover/40 p-3 dark:border-white/10">
-          <span className="text-[13px] font-medium">Which folder is yours?</span>
-          <p className="mb-2 text-caption text-foreground/55">Your folder is shown first as &ldquo;Mine&rdquo;, and new dots you create go into it. It is saved in this browser only, so each teammate sets their own.</p>
-          <input className="field" placeholder="Your folder name, exactly as it appears in the sidebar" maxLength={40} value={me} onChange={(e) => setMe(e.target.value)} />
+          <span className="text-[13px] font-medium">Which project is yours?</span>
+          <p className="mb-2 text-caption text-foreground/55">Your project is shown first as &ldquo;Mine&rdquo;, and new dots you create go into it. It is saved in this browser only, so each teammate sets their own.</p>
+          <input className="field" placeholder="Your project name, exactly as it appears in the sidebar" maxLength={40} value={me} onChange={(e) => setMe(e.target.value)} />
         </label>
         <div className="grid gap-2 sm:grid-cols-2">
           <input className="field" placeholder="Your name" value={form.name} disabled={!loaded} onChange={(e) => set({ name: e.target.value })} />
