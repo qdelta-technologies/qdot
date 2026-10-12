@@ -7,7 +7,7 @@ import { ALL_FOLDERS, NONE_FOLDER, ownedBy } from "@/lib/dots";
 import type { Dot } from "@/lib/types";
 import DotOrb from "./DotOrb";
 
-/** The sidebar's top level: your folders, with + New folder. Opening one shows its dots and chats. */
+/** The sidebar's top level: your folders, with + New project. Opening one shows its dots and chats. */
 export default function FolderList({
   folders,
   dots,
@@ -84,11 +84,17 @@ export default function FolderList({
         </div>
       );
     }
-    const Icon = opts.icon === "open" ? FolderOpen : Folder;
     return (
       <div key={key} className="group relative flex items-center rounded-xl transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]">
-        <button type="button" onClick={() => onOpen(key)} className="flex min-w-0 flex-1 items-center gap-3 px-2.5 py-2.5 text-left [@media(hover:none)]:pr-16">
-          <Icon className="size-5 shrink-0 text-foreground/50" strokeWidth={1.5} />
+        <button type="button" onClick={() => onOpen(key)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-2.5 py-2.5 text-left [@media(hover:none)]:pr-16">
+          {opts.icon === "open" ? (
+            <FolderOpen className="size-5 shrink-0 text-foreground/50" strokeWidth={1.5} />
+          ) : (
+            <>
+              <Folder className="size-5 shrink-0 text-foreground/50 group-hover:hidden" strokeWidth={1.5} />
+              <FolderOpen className="hidden size-5 shrink-0 text-foreground/70 group-hover:block" strokeWidth={1.5} />
+            </>
+          )}
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
               <span className="truncate text-[15px] font-medium">{label}</span>
@@ -108,10 +114,10 @@ export default function FolderList({
         </button>
         {opts.manage && (
           <span className="absolute top-1/2 right-1.5 hidden -translate-y-1/2 items-center group-hover:flex [@media(hover:none)]:flex">
-            <button className="btn-quiet size-7 p-0 text-foreground/45 [@media(hover:none)]:size-9" aria-label={`Rename ${label}`} title="Rename folder" onClick={() => (setRename(key), setEditing(key))}>
+            <button className="btn-quiet size-7 cursor-pointer p-0 text-foreground/45 [@media(hover:none)]:size-9" aria-label={`Rename ${label}`} title="Rename folder" onClick={() => (setRename(key), setEditing(key))}>
               <Pencil className="size-3.5" strokeWidth={1.75} />
             </button>
-            <button className="btn-quiet size-7 p-0 text-foreground/45 hover:text-destructive [@media(hover:none)]:size-9" aria-label={`Delete ${label}`} title="Delete folder" onClick={() => setRemoving(key)}>
+            <button className="btn-quiet size-7 cursor-pointer p-0 text-foreground/45 hover:text-destructive [@media(hover:none)]:size-9" aria-label={`Delete ${label}`} title="Delete folder" onClick={() => setRemoving(key)}>
               <Trash2 className="size-3.5" strokeWidth={1.75} />
             </button>
           </span>
@@ -121,7 +127,7 @@ export default function FolderList({
   };
 
   return (
-    <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Folders">
+    <nav className="qdot-pane-left qdot-stagger min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Folders">
       <div className="mb-1 px-1">
         {adding ? (
           <form
@@ -132,7 +138,7 @@ export default function FolderList({
             }}
           >
             <FolderPlus className="size-4 shrink-0 text-foreground/45" strokeWidth={1.75} />
-            <input autoFocus className="h-7 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-foreground/40" placeholder="Folder name" maxLength={40} value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Escape" && (setAdding(false), setDraft(""))} />
+            <input autoFocus className="h-7 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-foreground/40" placeholder="Project name" maxLength={40} value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Escape" && (setAdding(false), setDraft(""))} />
             <button className="btn-primary h-6 px-2 text-[12px]" disabled={!draft.trim()}>
               Add
             </button>
@@ -141,9 +147,9 @@ export default function FolderList({
             </button>
           </form>
         ) : (
-          <button type="button" onClick={() => setAdding(true)} className="flex w-full items-center gap-2 rounded-xl border border-dashed border-black/15 px-3 py-2 text-[14px] text-foreground/60 transition-colors hover:border-black/30 hover:text-foreground dark:border-white/15 dark:hover:border-white/30">
+          <button type="button" onClick={() => setAdding(true)} className="flex w-full cursor-pointer items-center gap-2 rounded-xl border border-dashed border-black/15 px-3 py-2 text-[14px] text-foreground/60 transition-colors hover:border-black/30 hover:text-foreground dark:border-white/15 dark:hover:border-white/30">
             <FolderPlus className="size-4" strokeWidth={1.75} />
-            New folder
+            New project
           </button>
         )}
       </div>

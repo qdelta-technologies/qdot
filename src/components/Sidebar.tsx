@@ -18,7 +18,7 @@ import ThemeToggle from "./ThemeToggle";
 import DotOrb from "./DotOrb";
 import FolderList from "./FolderList";
 import { ALL_FOLDERS, NONE_FOLDER, foldersOf, ownedBy } from "@/lib/dots";
-import { setMe, setOwnerFilter, useMe, useOwnerFilter } from "@/lib/me";
+import { setOwnerFilter, useMe, useOwnerFilter } from "@/lib/me";
 import type { Conversation, Dot, Message } from "@/lib/types";
 
 export function Wordmark() {
@@ -70,8 +70,6 @@ export default function Sidebar() {
   const [, start] = useTransition();
   const me = useMe();
   const ownerPick = useOwnerFilter();
-  const [meDraft, setMeDraft] = useState("");
-  const [meSkipped, setMeSkipped] = useState(false);
   const activeDot = pathname.match(/^\/dots\/([^/]+)/)?.[1];
   const drawerOpen = useSidebarOpen();
   const desktopOpen = useDesktopSidebarOpen();
@@ -323,42 +321,14 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Who am I? Asked once per browser, and only once someone has an owner to pick from. */}
-      {inList && !me && !meSkipped && (
-        <div className="mx-3 mb-2 shrink-0 rounded-xl border border-black/10 bg-popover/60 p-2.5 dark:border-white/10">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium">Which folder is yours?</span>
-            <button type="button" className="text-[11px] text-foreground/45 hover:text-foreground" onClick={() => setMeSkipped(true)}>
-              Not now
-            </button>
-          </div>
-          <p className="mt-0.5 text-[11px] text-foreground/50">Your folder is shown first, as &ldquo;Mine&rdquo;.</p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {folders.map((o) => (
-              <button key={o} type="button" onClick={() => setMe(o)} className="rounded-full border border-black/10 px-2 py-0.5 text-[12px] text-foreground/70 hover:border-black/25 hover:text-foreground dark:border-white/10">
-                {o}
-              </button>
-            ))}
-          </div>
-          <form
-            className="mt-1.5 flex gap-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (meDraft.trim()) setMe(meDraft.trim().slice(0, 40));
-            }}
-          >
-            <input className="field h-7 flex-1 text-[12px]" placeholder="Or type your folder name" value={meDraft} maxLength={40} onChange={(e) => setMeDraft(e.target.value)} />
-            <button className="btn-primary h-7 px-2.5 text-[12px]" disabled={!meDraft.trim()}>
-              Save
-            </button>
-          </form>
-        </div>
-      )}
-
+      {inList ? (
+        <FolderList folders={folders} dots={dots} me={me} onOpen={setOwnerFilter} />
+      ) : (
+      <div key={ownerView} className={`flex min-h-0 flex-1 flex-col ${hasFolders ? "qdot-pane-right" : ""}`}>
       {/* Inside a folder: the way back to the folder list */}
       {!q && hasFolders && !inList && (
         <div className="mx-3 mb-1 flex shrink-0 items-center gap-1.5">
-          <button type="button" onClick={() => setOwnerFilter("")} className="flex size-8 items-center justify-center rounded-full text-foreground/60 transition-colors hover:bg-black/[0.05] hover:text-foreground" aria-label="Back to folders" title="Back to folders">
+          <button type="button" onClick={() => setOwnerFilter("")} className="flex size-8 cursor-pointer items-center justify-center rounded-full text-foreground/60 transition-colors hover:bg-black/[0.05] hover:text-foreground" aria-label="Back to folders" title="Back to folders">
             <ChevronLeft className="size-4" strokeWidth={1.75} />
           </button>
           <Folder className="size-4 shrink-0 text-foreground/45" strokeWidth={1.75} />
@@ -447,9 +417,6 @@ export default function Sidebar() {
           )}
         </div>
       )}
-      {inList ? (
-        <FolderList folders={folders} dots={dots} me={me} onOpen={setOwnerFilter} />
-      ) : (
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {!loaded && (
           <div role="status" aria-label="Loading chats" className="space-y-0.5">
@@ -557,6 +524,7 @@ export default function Sidebar() {
           </p>
         )}
       </nav>
+      </div>
       )}
 
       {selecting && picked.size > 0 && (
@@ -597,7 +565,6 @@ export default function Sidebar() {
           aria-label="Settings"
         >
           <Settings className="size-4" strokeWidth={1.5} />
-          <span className={`absolute top-0.5 right-0.5 size-2 rounded-full ring-2 ring-background ${connected ? "bg-success" : "bg-foreground/25"}`} />
         </Link>
         {authEnabled && (
           <button

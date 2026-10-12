@@ -32,7 +32,7 @@ export default function FolderMenu({ dot }: { dot: Dot }) {
     <div className="relative hidden shrink-0 sm:block">
       <button
         type="button"
-        className="btn-quiet h-8 gap-1.5 px-2 text-[13px]"
+        className="btn-quiet h-8 cursor-pointer gap-1.5 px-2 text-[13px]"
         title="Move this dot to a folder"
         aria-label="Folder"
         aria-expanded={open}
@@ -49,14 +49,14 @@ export default function FolderMenu({ dot }: { dot: Dot }) {
           <div className="qdot-menu absolute top-full left-0 z-50 mt-1 w-56 rounded-xl border border-black/10 bg-popover p-1.5 shadow-elevated dark:border-white/10">
             <div className="eyebrow px-2 pt-1 pb-1.5">Move {dot.name} to</div>
             {folders.map((f) => (
-              <button key={f} type="button" onClick={() => move(f)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-black/[0.05] dark:hover:bg-white/[0.08]">
+              <button key={f} type="button" onClick={() => move(f)} className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-black/[0.05] dark:hover:bg-white/[0.08]">
                 <Folder className="size-3.5 shrink-0 text-foreground/50" strokeWidth={1.75} />
                 <span className="min-w-0 flex-1 truncate">{f}</span>
                 {f.toLowerCase() === current.toLowerCase() && <Check className="size-3.5 text-brand-readable" strokeWidth={2} />}
               </button>
             ))}
             {current && (
-              <button type="button" onClick={() => move("")} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-foreground/60 hover:bg-black/[0.05] dark:hover:bg-white/[0.08]">
+              <button type="button" onClick={() => move("")} className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-foreground/60 hover:bg-black/[0.05] dark:hover:bg-white/[0.08]">
                 Take out of folder
               </button>
             )}
