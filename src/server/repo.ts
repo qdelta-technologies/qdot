@@ -48,6 +48,7 @@ export function findDotByName(name: string): Dot | null {
 
 export function createDot(input: { name: string; purpose: string; instructions?: string; look: Look; owner?: string }): Dot {
   const dotId = id("dot");
+  if (input.owner?.trim()) addFolder(input.owner.trim());
   db().prepare("INSERT INTO dots (id, name, purpose, instructions, look, owner, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
     .run(dotId, input.name, input.purpose, input.instructions ?? "", JSON.stringify(input.look), input.owner ?? "", now());
   const dot = getDot(dotId)!;
@@ -59,6 +60,12 @@ export function updateDot(
   dotId: string,
   patch: Partial<Pick<Dot, "name" | "purpose" | "instructions" | "look" | "status" | "localAccess" | "model" | "owner">>,
 ): Dot | null {
+  // A folder lives until it is deleted, even if its last dot moves out: save the names on both sides of a move.
+  if (patch.owner !== undefined) {
+    const before = getDot(dotId)?.owner.trim();
+    if (before) addFolder(before);
+    if (patch.owner.trim()) addFolder(patch.owner.trim());
+  }
   const cols: string[] = [];
   const vals: (string | number | null)[] = [];
   if (patch.name !== undefined) {

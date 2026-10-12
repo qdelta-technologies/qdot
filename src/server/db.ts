@@ -90,6 +90,17 @@ function migrate(conn: DatabaseSync) {
   if (!cols.includes("box_id")) conn.exec("ALTER TABLE dots ADD COLUMN box_id TEXT");
   // Which teammate a dot belongs to (free text; empty = unassigned). Used only to organise the shared workspace.
   if (!cols.includes("owner")) conn.exec("ALTER TABLE dots ADD COLUMN owner TEXT NOT NULL DEFAULT ''");
+  // Folders that dots already use become saved folders, so they survive their last dot moving out. Safe to repeat: a deleted folder has no dots left, so it is not brought back.
+  try {
+    const row = conn.prepare("SELECT value FROM settings WHERE key = 'folders'").get() as { value: string } | undefined;
+    const saved: string[] = row ? (JSON.parse(row.value) as unknown[]).filter((x): x is string => typeof x === "string") : [];
+    const known = new Set(saved.map((f) => f.trim().toLowerCase()));
+    const used = (conn.prepare("SELECT DISTINCT trim(owner) AS owner FROM dots WHERE trim(owner) != ''").all() as { owner: string }[]).map((r) => r.owner);
+    const add = used.filter((o) => !known.has(o.toLowerCase()));
+    if (add.length) conn.prepare("INSERT INTO settings (key, value) VALUES ('folders', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify([...saved, ...add]));
+  } catch {
+    // an unreadable folder list is rebuilt by the client from the dots
+  }
   const convCols = conn.prepare("PRAGMA table_info(conversations)").all().map((c) => (c as { name: string }).name);
   // Model-facing history for providers that don't keep conversation state (OpenRouter).
   if (convCols.length && !convCols.includes("history")) conn.exec("ALTER TABLE conversations ADD COLUMN history TEXT");
