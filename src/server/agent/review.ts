@@ -10,23 +10,73 @@ import type { Rule, RuleDecision } from "@/lib/types";
 
 export type Verdict = { decision: RuleDecision; rule: Rule | null };
 
-const FILLER = new Set(["the", "a", "an", "to", "of", "on", "in", "for", "me", "my", "and", "or", "with", "via", "using", "use", "when", "you", "your", "want", "wants", "it", "is", "from", "this", "that", "do", "dot", "any", "all"]);
+const FILLER = new Set([
+  "the", "a", "an", "to", "of", "on", "in", "for", "me", "my", "and", "or", "with", "via", "using", "use", "when", "you", "your", "want", "wants", "it", "is", "from", "this", "that", "do", "dot", "any", "all",
+  // boilerplate people add when they phrase a rule as a permission
+  "always", "allow", "allowed", "never", "without", "requiring", "require", "required", "approval", "approve", "permission", "ask", "asking", "can", "may", "should", "must", "have", "has", "access", "free", "freely", "automatically", "first", "i", "you", "are", "be", "also",
+]);
+
+// Different words for the same kind of action compare equal ("update" and "edit").
+const VERB_CLASS: Record<string, string> = {
+  update: "edit", edit: "edit", modify: "edit", change: "edit", write: "edit", append: "edit", insert: "edit", batch: "edit", set: "edit", rename: "edit", format: "edit",
+  add: "create", new: "create", make: "create", create: "create",
+  remove: "delete", delete: "delete", trash: "delete", clear: "delete",
+  reply: "send", respond: "send", forward: "send", draft: "send", send: "send",
+  publish: "post", tweet: "post", post: "post", share: "post",
+};
+// "...all operations / anything / everything" means any action on the app, so the verb doesn't have to match.
+const WILDCARD = new Set(["operation", "operations", "action", "actions", "anything", "everything", "task", "tasks"]);
+
+// A word in the action also stands for the family or kind it belongs to, so a rule about "Google Drive" or "email" covers them.
+const KIND: Record<string, string[]> = {
+  sheet: ["google", "drive", "spreadsheet"], googlesheet: ["google", "sheet", "drive", "spreadsheet"], doc: ["google", "drive"], googledoc: ["google", "doc", "drive"],
+  slide: ["google", "drive"], googleslide: ["google", "slide", "drive"], form: ["google", "drive"], file: ["drive"],
+  gmail: ["google", "email", "mail"], outlook: ["email", "mail"], mail: ["email"], calendar: ["google", "event"], googlecalendar: ["google", "calendar", "event"],
+  twitter: ["social", "post"], instagram: ["social", "post"], linkedin: ["social", "post"], facebook: ["social", "post"],
+};
+
+function baseStem(w: string): string {
+  let s = w.length > 4 ? w.replace(/(ing|ed)$/, "") : w;
+  s = s.replace(/ies$/, "y").replace(/([^s])s$/, "$1");
+  return s.length > 3 ? s.replace(/e$/, "") : s; // "update"/"updated"/"updating" all become "updat"
+}
+
+// The tables above are written in plain words; compare them in stemmed form.
+const verbClass = new Map(Object.entries(VERB_CLASS).map(([k, v]) => [baseStem(k), baseStem(v)]));
+const kinds = new Map(Object.entries(KIND).map(([k, v]) => [baseStem(k), v.map(baseStem)]));
+const wildcards = new Set([...WILDCARD].map(baseStem));
+const verbs = new Set(verbClass.values());
+
+function stem(w: string): string {
+  const s = baseStem(w);
+  return verbClass.get(s) ?? s;
+}
 
 /** Lower-case word stems without filler, so "sending emails" and "send the email" compare equal. */
 function stems(text: string): Set<string> {
   const out = new Set<string>();
   for (const w of text.toLowerCase().split(/[^a-z0-9]+/)) {
     if (!w || FILLER.has(w)) continue;
-    out.add(w.length > 4 ? w.replace(/(ing|ed|es|s)$/, "") : w.replace(/s$/, ""));
+    out.add(stem(w));
   }
   return out;
 }
 
+function expandKinds(have: Set<string>): Set<string> {
+  const text = [...have];
+  for (const w of text) for (const k of kinds.get(w) ?? []) have.add(k);
+  // "google sheets" arrives as two words; join neighbours so the app-family entries above can fire.
+  if (have.has("google")) for (const w of text) for (const k of kinds.get("google" + w) ?? []) have.add(k);
+  return have;
+}
+
 /** Rules whose every key word shows up in the action. Cheap and always available, so rules work even if the AI reviewer is down. */
 function keywordMatches(rules: Rule[], action: string): Rule[] {
-  const have = stems(action);
+  const have = expandKinds(stems(action));
   return rules.filter((r) => {
     const need = stems(r.action);
+    const wild = [...need].some((w) => wildcards.has(w));
+    for (const w of [...need]) if (wildcards.has(w) || (wild && verbs.has(w))) need.delete(w);
     return need.size > 0 && [...need].every((w) => have.has(w));
   });
 }
@@ -41,7 +91,8 @@ export async function review(dotId: string, action: string, fallback: RuleDecisi
     const { client, model, stateless } = clientFor((await models()).review);
     const instructions =
       "You gate actions of a personal AI agent. Decide which of the user's rules (if any) apply to the pending action. " +
-      "A rule applies only if the action clearly falls under it. Return the numbers of every applying rule; return an empty list if none apply.";
+      "A rule applies only if the action clearly falls under it. A rule naming an app family covers its member apps (a Google Drive rule covers Google Sheets, Docs and Slides; an email rule covers Gmail), " +
+      "and 'all edits/operations' covers every kind of change to that app. Return the numbers of every applying rule; return an empty list if none apply.";
     const input = `Rules:
 ${list}
 

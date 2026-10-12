@@ -213,7 +213,13 @@ export async function resolveCard(messageId: string, choice: "approve" | "deny" 
   const status: CardData["status"] = choice === "answer" ? "answered" : approved ? "approved" : "denied";
   repo.updateMessage(messageId, { card: { ...card, status, answer } });
   repo.settleWaiting(dot.id); // answering the last open card must not leave the dot labelled "waiting"
-  if (choice === "always" && card.ruleAction) repo.addRule({ dotId: dot.id, action: card.ruleAction, decision: "allow" });
+  if (choice === "always" && card.ruleAction) {
+    // Save the short "app: action" kind, not the one-off wording of this call, so the rule also matches next time.
+    const action = card.ruleAction.replace(/^[\s\S]*\(using ([^:)]+)(?:: ([^)]+))?\)\s*$/, (_m, app: string, verb?: string) => (verb ? `${verb.split(",")[0].trim()} with ${app.split(",")[0].trim()}` : `use ${app.split(",")[0].trim()}`));
+    const same = repo.rulesFor(dot.id).find((r) => r.dotId === dot.id && r.action.trim().toLowerCase() === action.trim().toLowerCase());
+    if (same) repo.updateRule(same.id, { action: same.action, decision: "allow" });
+    else repo.addRule({ dotId: dot.id, action, decision: "allow" });
+  }
 
   const convId = msg.conversationId ?? repo.latestConversationId(dot.id);
   const pending = parsePending(repo.threadOf(convId).pending);

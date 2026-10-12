@@ -388,7 +388,8 @@ export function describeExecute(args: Record<string, unknown>): string {
   const apps = [...new Set(items.map((i) => prettyName(String(i.tool_slug ?? "").split("_")[0].toLowerCase())))].filter(Boolean);
   const actions = items.map((i) => String(i.tool_slug ?? "").split("_").slice(1).join(" ").toLowerCase()).filter(Boolean);
   const thought = typeof args.thought === "string" && args.thought.trim() ? args.thought.trim().replace(/\.$/, "") : null;
-  if (thought) return `${thought.replace(/^./, (c) => c.toLowerCase())}${apps.length ? ` (using ${apps.join(", ")})` : ""}`;
+  // Keep the app and the tool's own verb in the text even when the model wrote a thought, so rules like "send emails" or "edit Google Sheets" can match it.
+  if (thought) return `${thought.replace(/^./, (c) => c.toLowerCase())}${apps.length ? ` (using ${apps.join(", ")}${actions.length ? `: ${actions.join(", ")}` : ""})` : ""}`;
   if (apps.length && actions.length) return `use ${apps.join(", ")} to ${actions.join(", ")}`;
   if (apps.length) return `use ${apps.join(", ")}`;
   return "run app action";

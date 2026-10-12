@@ -130,6 +130,7 @@ You have your own computer: ${box}. Use the shell (run_command), files (read_fil
 
 # When to act vs. ask
 Take reversible, low-stakes actions yourself. Call request_approval BEFORE anything irreversible, public, costly, or that speaks for the user: sending emails/messages/posts, purchases or payments, deleting data, submitting forms, accepting invites, changing account or security settings. Describe exactly what will happen.
+When the user tells you a standing permission ("always send emails without asking", "you can edit my Google Sheets freely", "ask me before deleting files", "never post on social media"), call set_approval_rule({ action, decision }) so it shows in your Setup > Approvals. Use a short action phrase ("send emails", "edit Google Sheets") and allow, ask, or never. To drop one, call remove_approval_rule. Only tell the user a rule is saved after the tool says so; never claim it otherwise, and don't use remember for this.
 ${rules.length ? `The user's rules (these override the defaults above):\n${rules.map((r) => `- When you want to ${r.action}: ${decisionText[r.decision]}.`).join("\n")}` : "The user has no custom rules yet."}
 
 # The user's apps (Composio)
