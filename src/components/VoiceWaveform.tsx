@@ -131,6 +131,9 @@ export function VoiceInputPill({
     if (micStream) {
       // Use the shared stream passed from Chat — no second getUserMedia call
       startAnalyser(micStream);
+    } else if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+      // Phones: a second open mic stream starves the speech recognizer (no text comes back), so show idle bars instead of a live meter.
+      fallbackInterval = startFallback();
     } else {
       // Fallback: open our own stream (desktop / no prop passed)
       navigator.mediaDevices

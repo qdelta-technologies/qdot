@@ -477,14 +477,21 @@ function Composer({
     };
   }, []);
 
+  const releaseMic = () => {
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+    }
+  };
+
   const stopListening = () => {
     userStoppedRef.current = true;
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
-    }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
+      // The last words are only delivered after stop(); the recognizer's onend releases the mic once they arrive. Fallback in case onend never fires.
+      setTimeout(releaseMic, 2500);
+    } else {
+      releaseMic();
     }
     setIsListening(false);
   };
@@ -522,6 +529,10 @@ function Composer({
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           alert("Microphone permission was denied. Please allow microphone access in your browser to dictate.");
           stopListening();
+        } else if (event.error === "audio-capture" || event.error === "network") {
+          // These used to fail silently on phones: the mic showed as recording but no text ever came.
+          alert(event.error === "network" ? "Voice typing needs an internet connection. Please try again." : "Could not use the microphone. Close other apps that use it and try again.");
+          stopListening();
         }
       };
 
@@ -530,6 +541,7 @@ function Composer({
       recognition.onend = () => {
         if (userStoppedRef.current) {
           setIsListening(false);
+          releaseMic();
         } else {
           // Browser auto-stopped (iOS/Android silence detection) — restart
           setTimeout(() => {
@@ -565,6 +577,13 @@ function Composer({
 
     userStoppedRef.current = false;
     baseTextRef.current = text;
+
+    // On phones, holding our own mic stream at the same time starves the speech recognizer (it listens but returns no text),
+    // so let the recognizer open the mic alone there. The waveform is only a nicety on desktop.
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+      startRecognition();
+      return;
+    }
 
     // Get the mic stream first (single shared stream for both recognition + waveform)
     navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
@@ -938,6 +957,28 @@ function Composer({
 }
 
 
+/** Small copy button for the user's own message (shown on hover under the bubble). */
+function CopyTextButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      title={copied ? "Copied" : "Copy message"}
+      aria-label="Copy message"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch {}
+      }}
+      className="flex size-7 items-center justify-center rounded-md text-foreground/45 transition-colors hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.08]"
+    >
+      {copied ? <Check className="size-3.5 text-emerald-500" strokeWidth={2} /> : <Copy className="size-3.5" strokeWidth={1.75} />}
+    </button>
+  );
+}
+
 /** Assistant Action Bar (Copy, Thumbs Up/Down, Read Aloud, Regenerate) */
 function AssistantActions({ text, ts, onRetry }: { text: string; ts?: number; onRetry?: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -1115,7 +1156,10 @@ export const MessageRow = memo(function MessageRow({
           </div>
         )}
         {!!m.attachments?.length && <Attachments items={m.attachments} align="end" />}
-        <MessageTime ts={m.createdAt} className="mt-1 mr-2 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100" />
+        <div className="mt-1 mr-1 flex items-center gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+          {m.text && <CopyTextButton text={m.text} />}
+          <MessageTime ts={m.createdAt} className="mr-1" />
+        </div>
       </div>
     );
   }
