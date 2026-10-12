@@ -157,8 +157,10 @@ export default function Sidebar() {
           : "";
   const inList = !q && hasFolders && pick === "";
   const ownerView = hasFolders && pick ? pick : ALL_FOLDERS;
-  const ownerMatches = (d: Dot) => ownerView === ALL_FOLDERS || d.id === activeDot || (ownerView === NONE_FOLDER ? !d.owner.trim() : ownedBy(d, ownerView));
-  const shownDots = useMemo(() => sortedDots.filter(ownerMatches), [sortedDots, ownerView, activeDot]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ownerMatches = (d: Dot) => ownerView === ALL_FOLDERS || (ownerView === NONE_FOLDER ? !d.owner.trim() : ownedBy(d, ownerView));
+  const shownDots = useMemo(() => sortedDots.filter(ownerMatches), [sortedDots, ownerView]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The dot you are on only counts for the chat list and the "this dot / all dots" toggle while it is in the folder being shown.
+  const activeInView = Boolean(activeDot && dotById.get(activeDot) && ownerMatches(dotById.get(activeDot)!));
 
   // Chats are ordered by when they were started, not by activity, so rows never jump while a dot works.
   // With a dot open the list shows that dot's chats; "All dots" (or searching) shows everything.
@@ -166,7 +168,7 @@ export default function Sidebar() {
     const query = q.trim().toLowerCase();
     const sorted = [...conversations].sort((a, b) => b.createdAt - a.createdAt);
     if (!query) {
-      if (scope === "dot" && activeDot) return sorted.filter((c) => c.dotId === activeDot);
+      if (scope === "dot" && activeInView) return sorted.filter((c) => c.dotId === activeDot);
       if (ownerView === ALL_FOLDERS) return sorted;
       return sorted.filter((c) => {
         const d = dotById.get(c.dotId);
@@ -175,7 +177,7 @@ export default function Sidebar() {
     }
     const hits = new Set(messages.filter((m) => m.conversationId && m.text.toLowerCase().includes(query)).map((m) => m.conversationId));
     return sorted.filter((c) => c.title.toLowerCase().includes(query) || hits.has(c.id) || dotById.get(c.dotId)?.name.toLowerCase().includes(query));
-  }, [conversations, messages, q, dotById, scope, activeDot, ownerView]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conversations, messages, q, dotById, scope, activeDot, activeInView, ownerView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isAutomation = (c: Conversation) => /^(Routine|Trigger) · /.test(c.title);
   const sections = useMemo(() => {
@@ -401,7 +403,7 @@ export default function Sidebar() {
         </div>
       )}
 
-      {!q && !inList && activeDot && dotById.get(activeDot) && (
+      {!q && !inList && activeDot && activeInView && (
         <div className="mx-3 mb-1 flex shrink-0 gap-1 rounded-full bg-black/[0.04] p-0.5 text-[12px]" role="tablist" aria-label="Which chats to show">
           {(["dot", "all"] as const).map((v) => (
             <button

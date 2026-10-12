@@ -33,7 +33,9 @@ export default function SetupPane({ dot }: { dot: Dot }) {
   const [name, setName] = useState(dot.name);
   const [purpose, setPurpose] = useState(dot.purpose);
   const [instructions, setInstructions] = useState(dot.instructions);
-  const [owner, setOwner] = useState(dot.owner);
+  // Only set once the user types in the Folder field. Until then the dot's current folder is used, so a move made elsewhere is never overwritten by an old copy of this form.
+  const [ownerEdit, setOwnerEdit] = useState<string | null>(null);
+  const owner = ownerEdit ?? dot.owner;
   const [look, setLook] = useState(dot.look);
   const [memory, setMemory] = useState("");
   const [routine, setRoutine] = useState({ name: "", instruction: "", schedule: "0 8 * * *" });
@@ -50,7 +52,7 @@ export default function SetupPane({ dot }: { dot: Dot }) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const dirty = name !== dot.name || purpose !== dot.purpose || instructions !== dot.instructions || owner.trim() !== dot.owner || JSON.stringify(look) !== JSON.stringify(dot.look);
+  const dirty = name !== dot.name || purpose !== dot.purpose || instructions !== dot.instructions || (ownerEdit !== null && ownerEdit.trim() !== dot.owner) || JSON.stringify(look) !== JSON.stringify(dot.look);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -68,7 +70,7 @@ export default function SetupPane({ dot }: { dot: Dot }) {
                 <span className="eyebrow mb-1.5 block">Job</span>
                 <input className="field" value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="What this dot is for" />
               </label>
-              <OwnerField value={owner} onChange={setOwner} />
+              <OwnerField value={owner} onChange={setOwnerEdit} />
               <label className="block">
                 <span className="eyebrow mb-1.5 block">Instructions</span>
                 <textarea
@@ -93,7 +95,12 @@ export default function SetupPane({ dot }: { dot: Dot }) {
               <div className="dot-grid surface flex w-full justify-center py-2">
                 <Dot3DLazy look={look} size={190} stage />
               </div>
-              <button className="btn-primary w-full" disabled={!dirty || pending} onClick={() => start(async () => setSaveError(await actions.updateDot(dot.id, { name, purpose, instructions, owner, look })))}>
+              <button className="btn-primary w-full" disabled={!dirty || pending} onClick={() =>
+                  start(async () => {
+                    setSaveError(await actions.updateDot(dot.id, { name, purpose, instructions, ...(ownerEdit !== null ? { owner: ownerEdit } : {}), look }));
+                    setOwnerEdit(null);
+                  })
+                }>
                 {dirty ? "Save changes" : "Saved"}
               </button>
               {saveError && <p className="text-body-sm text-destructive">{saveError}</p>}
