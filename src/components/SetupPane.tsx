@@ -110,13 +110,9 @@ export default function SetupPane({ dot }: { dot: Dot }) {
           <ApprovalMode dotId={dot.id} name={dot.name} />
         </Section>
 
-        <Section eyebrow="Accounts" title="Instagram" description={`Which connected Instagram account ${dot.name} uses.`}>
-          <AppAccountPicker dotId={dot.id} name={dot.name} toolkit="instagram" appName="Instagram" />
-        </Section>
+        <AppAccountPicker dotId={dot.id} name={dot.name} toolkit="instagram" appName="Instagram" />
 
-        <Section eyebrow="Accounts" title="LinkedIn" description={`Which connected LinkedIn account ${dot.name} uses.`}>
-          <AppAccountPicker dotId={dot.id} name={dot.name} toolkit="linkedin" appName="LinkedIn" />
-        </Section>
+        <AppAccountPicker dotId={dot.id} name={dot.name} toolkit="linkedin" appName="LinkedIn" />
 
         <Section eyebrow="Automation" title="Routines" description={`Recurring tasks ${dot.name} runs on a schedule. You can also just ask it in chat.`}>
           <div className="space-y-3">
