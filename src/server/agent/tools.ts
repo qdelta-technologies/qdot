@@ -649,38 +649,6 @@ Account: your connected LinkedIn account`,
     execute: async (a) => (repo.deleteMemory(s(a.memory_id)), "Forgotten."),
   },
   {
-    name: "set_approval_rule",
-    label: "Updating approval rules",
-    description:
-      "Save or change one of the user's approval rules, shown in this dot's Setup > Approvals. Use it whenever the user states a standing permission, such as 'always send emails without asking' (allow), 'ask me before deleting files' (ask), or 'never post on social media' (never). Updates the rule if the same action already has one. Never tell the user a rule was saved unless this tool returned success.",
-    parameters: obj({
-      action: str("Short action phrase the rule is about, e.g. 'send emails' or 'edit Google Sheets'. No 'always' or 'without approval'."),
-      decision: { type: "string", enum: ["allow", "ask", "never"], description: "allow = do it without asking, ask = wait for approval every time, never = refuse" },
-    }),
-    execute: async (a, ctx) => {
-      const action = s(a.action).trim();
-      const decision = s(a.decision).trim().toLowerCase();
-      if (!action) return "No rule saved: the action was empty.";
-      if (decision !== "allow" && decision !== "ask" && decision !== "never") return 'No rule saved: decision must be "allow", "ask" or "never".';
-      const same = repo.rulesFor(ctx.dot.id).find((r) => r.dotId === ctx.dot.id && r.action.trim().toLowerCase() === action.toLowerCase());
-      const rule = same ? repo.updateRule(same.id, { action, decision }) : repo.addRule({ dotId: ctx.dot.id, action, decision });
-      return rule ? `Saved. Rule: when you want to ${rule.action} → ${decision}. It now shows in Setup > Approvals.` : "No rule saved: the rule could not be found.";
-    },
-  },
-  {
-    name: "remove_approval_rule",
-    label: "Updating approval rules",
-    description: "Delete one of this dot's approval rules, matched by its action text (as listed in your rules).",
-    parameters: obj({ action: str("The rule's action text, e.g. 'send emails'") }),
-    execute: async (a, ctx) => {
-      const action = s(a.action).trim().toLowerCase();
-      const hit = repo.rulesFor(ctx.dot.id).find((r) => r.dotId === ctx.dot.id && r.action.trim().toLowerCase() === action);
-      if (!hit) return `No rule of this dot's matches "${s(a.action)}". Global rules can only be changed in Settings.`;
-      repo.deleteRule(hit.id);
-      return "Rule removed.";
-    },
-  },
-  {
     name: "save_skill",
     label: "Learning a skill",
     description: "Save a reusable skill: step-by-step markdown instructions for a task you'll repeat. Updates the skill if the name exists.",

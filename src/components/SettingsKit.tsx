@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { ChevronDown, Pencil, X } from "lucide-react";
 import * as actions from "@/app/actions";
-import { useStore } from "@/lib/store";
-import type { RuleDecision } from "@/lib/types";
 
 /** Two-column settings block: label + description on the left, controls on the right. Optionally foldable (the choice is remembered). */
 export function Section({
@@ -117,96 +115,47 @@ export function EditButton({ onClick, label }: { onClick: () => void; label: str
   );
 }
 
-const DECISIONS: { value: RuleDecision; label: string; tone: string; hint: string }[] = [
-  { value: "allow", label: "Allow", tone: "bg-success/12 text-success", hint: "Allow: does it automatically, without asking." },
-  { value: "ask", label: "Ask", tone: "bg-warning/15 text-warning", hint: "Ask: waits for your approval every time." },
-  { value: "never", label: "Never", tone: "bg-destructive/10 text-destructive", hint: "Never: blocked completely." },
+type Mode = "allow" | "ask" | "never";
+
+const MODES: { value: Mode; label: string; tone: string; hint: (name: string) => string }[] = [
+  { value: "allow", label: "Allow", tone: "border-success/50 bg-success/10 text-success", hint: (n) => `${n} does everything on its own and never asks.` },
+  { value: "ask", label: "Ask", tone: "border-warning/50 bg-warning/15 text-warning", hint: (n) => `${n} reads and searches freely, but asks before it sends, posts, edits or deletes.` },
+  { value: "never", label: "Never", tone: "border-destructive/40 bg-destructive/10 text-destructive", hint: (n) => `${n} only reads and answers. It won't send, post, edit or delete anything.` },
 ];
 
-const ruleTime = (ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-
-const RULE_EXAMPLES =["send emails", "reply to emails", "delete files", "post on social media"];
-
-export function RuleEditor({ dotId, name }: { dotId: string | null; name: string }) {
-  const all = useStore((s) => s.rules);
-  const rules = useMemo(() => all.filter((r) => r.dotId === dotId), [all, dotId]);
-  const [action, setAction] = useState("");
-  const [decision, setDecision] = useState<RuleDecision>("ask");
-  const [editing, setEditing] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const resetForm = () => (setEditing(null), setAction(""), setDecision("ask"));
-
+/** One choice per dot: how much it may do without checking with you. */
+export function ApprovalMode({ dotId, name }: { dotId: string; name: string }) {
+  const [mode, setMode] = useState<Mode | null>(null);
+  const [, start] = useTransition();
+  useEffect(() => {
+    let live = true;
+    void actions.getApprovalMode(dotId).then((m) => live && setMode(m));
+    return () => {
+      live = false;
+    };
+  }, [dotId]);
+  const pick = (m: Mode) => {
+    setMode(m);
+    start(() => actions.setApprovalMode(dotId, m));
+  };
+  const current = MODES.find((m) => m.value === mode);
   return (
-    <div className="space-y-3">
-      {rules.length > 0 && (
-        <div className="surface divide-y divide-black/[0.06]">
-          {rules.map((r) => {
-            const d = DECISIONS.find((x) => x.value === r.decision)!;
-            return (
-              <div key={r.id} className="flex items-center gap-3 py-2 pr-2 pl-4">
-                <span className="min-w-0 flex-1 text-body-sm text-foreground/60">
-                  When {name} wants to <span className="text-foreground">{r.action}</span>
-                  <span className="mt-0.5 block text-caption text-foreground/45">
-                    Added {ruleTime(r.createdAt)}
-                    {r.updatedAt ? ` · Updated ${ruleTime(r.updatedAt)}` : ""}
-                  </span>
-                </span>
-                <span className={`shrink-0 rounded-xs px-1.5 py-0.5 font-mono text-[11px] tracking-wider uppercase ${d.tone}`}>{d.label}</span>
-                <EditButton label="Edit rule" onClick={() => (setEditing(r.id), setAction(r.action), setDecision(r.decision))} />
-                <RemoveButton label="Delete rule" onClick={() => start(() => actions.deleteRule(r.id))} />
-              </div>
-            );
-          })}
-        </div>
-      )}
-      <form
-        className="surface space-y-3 p-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!action.trim()) return;
-          start(() => (editing ? actions.updateRule(editing, action, decision) : actions.addRule(dotId, action, decision)));
-          resetForm();
-        }}
-      >
-        <label className="block">
-          <span className="eyebrow mb-1.5 block">When {name} wants to</span>
-          <input className="field" placeholder="reply to emails for me" value={action} onChange={(e) => setAction(e.target.value)} />
-          {!action && !editing && (
-            <span className="mt-1.5 flex flex-wrap gap-1.5">
-              {RULE_EXAMPLES.map((ex) => (
-                <button key={ex} type="button" onClick={() => setAction(ex)} className="rounded-full border border-black/10 px-2.5 py-0.5 text-[12px] text-foreground/55 transition-colors hover:border-black/25 hover:text-foreground">
-                  {ex}
-                </button>
-              ))}
-            </span>
-          )}
-        </label>
-        <div>
-          <span className="eyebrow mb-1.5 block">It should</span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {DECISIONS.map((d) => (
-              <button
-                key={d.value}
-                type="button"
-                onClick={() => setDecision(d.value)}
-                className={`h-8 rounded-md border px-3 text-[13px] transition-colors ${decision === d.value ? `border-current ${d.tone} font-medium` : "border-black/10 text-foreground/70 hover:border-black/25"}`}
-              >
-                {d.label}
-              </button>
-            ))}
-            {editing && (
-              <button type="button" className="btn-quiet ml-auto h-8 px-3 text-[13px]" onClick={resetForm}>
-                Cancel
-              </button>
-            )}
-            <button className={`btn-primary h-8 px-3 text-[13px] ${editing ? "" : "ml-auto"}`} disabled={pending || !action.trim()}>
-              {editing ? "Save rule" : "Add rule"}
-            </button>
-          </div>
-          <p className="mt-2 text-caption text-foreground/50">{DECISIONS.find((d) => d.value === decision)!.hint}</p>
-        </div>
-      </form>
-      <p className="text-caption text-foreground/45">One short, natural-language rule per action. &ldquo;Ask first&rdquo; wins if rules conflict. Built-in safety checks always apply.</p>
+    <div className="surface space-y-3 p-4">
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Approval setting">
+        {MODES.map((m) => (
+          <button
+            key={m.value}
+            type="button"
+            role="radio"
+            aria-checked={mode === m.value}
+            onClick={() => pick(m.value)}
+            className={`h-10 min-w-24 flex-1 rounded-lg border px-4 text-[14px] transition-colors sm:flex-none ${mode === m.value ? `${m.tone} font-medium` : "border-black/10 text-foreground/70 hover:border-black/25 dark:border-white/10"}`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-caption text-foreground/55">{current ? current.hint(name) : " "}</p>
     </div>
   );
 }

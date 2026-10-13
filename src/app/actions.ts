@@ -135,6 +135,14 @@ export async function setLocalAccess(dotId: string, allowed: boolean) {
     });
 }
 
+export async function getApprovalMode(dotId: string): Promise<"allow" | "ask" | "never"> {
+  return repo.approvalMode(dotId);
+}
+
+export async function setApprovalMode(dotId: string, mode: "allow" | "ask" | "never"): Promise<void> {
+  if (mode === "allow" || mode === "ask" || mode === "never") repo.setApprovalMode(dotId, mode);
+}
+
 export async function addRule(dotId: string | null, action: string, decision: RuleDecision) {
   if (action.trim()) repo.addRule({ dotId, action: action.trim(), decision });
 }

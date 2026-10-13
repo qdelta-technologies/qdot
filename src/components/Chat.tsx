@@ -1292,11 +1292,6 @@ function CardRow({ m }: { m: Message }) {
             <button className="btn-secondary h-8 px-3 text-[13px]" disabled={pending} onClick={() => act("deny")}>
               Deny
             </button>
-            {card.ruleAction && (
-              <button className="btn-quiet ml-auto" disabled={pending} onClick={() => act("always")} title={`Adds a rule: always allow when it wants to ${card.ruleAction}`}>
-                Always allow
-              </button>
-            )}
           </div>
         )}
 

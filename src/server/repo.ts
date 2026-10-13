@@ -439,6 +439,20 @@ export function removeFolder(name: string): string[] {
   return saveFolders(listFolders().filter((f) => !sameName(f, name)));
 }
 
+// ---------- approval mode ----------
+// One setting per dot: allow (never asks), ask (asks before actions that change things), never (refuses those actions). Ask is the default.
+
+export type ApprovalMode = "allow" | "ask" | "never";
+
+export function approvalMode(dotId: string): ApprovalMode {
+  const v = getSetting(`approval:${dotId}`);
+  return v === "allow" || v === "never" ? v : "ask";
+}
+
+export function setApprovalMode(dotId: string, mode: ApprovalMode) {
+  setSetting(`approval:${dotId}`, mode === "ask" ? null : mode);
+}
+
 // ---------- rules ----------
 
 const toRule = (r: Row): Rule => ({

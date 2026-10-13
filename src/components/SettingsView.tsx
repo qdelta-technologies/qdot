@@ -57,7 +57,7 @@ import { useStore } from "@/lib/store";
 import { setMe, useMe } from "@/lib/me";
 import { useTheme } from "@/lib/theme";
 import { openAfter } from "@/lib/popup";
-import { Empty, PageHeader, RemoveButton, RuleEditor, Section } from "./SettingsKit";
+import { Empty, PageHeader, RemoveButton, Section } from "./SettingsKit";
 import ModelPicker from "./ModelPicker";
 import { TriggersKey } from "./Triggers";
 import StorageManager from "./StorageManager";
@@ -157,10 +157,6 @@ export default function SettingsView() {
           description="Saved wording for emails and WhatsApp messages."
         >
           <TemplatesSection />
-        </Section>
-
-        <Section collapsible eyebrow="Approvals" title="Rules for all dots" description="These apply to every dot, on top of each dot's own rules.">
-          <RuleEditor dotId={null} name="a dot" />
         </Section>
 
         <Section collapsible

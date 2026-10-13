@@ -50,8 +50,6 @@ export const DEFAULT_COMPANY = `- **About QDelta**: QDelta is a premium digital 
   - **Actionable Pitch Notes**: In spreadsheet columns or digests, always provide a specific "QDelta Pitch Angle" detailing why they need QDelta and what exact hook to use.
 - In all lead generation routines and workflows, actively use this QDelta knowledge to identify, qualify, and recommend prospects that truly fit QDelta's services.`;
 
-const decisionText = { allow: "do it without asking", ask: "ask first (request_approval)", never: "never do it" } as const;
-
 export function systemPrompt(dot: Dot, trigger: Trigger): string {
   const ownerName = getSetting(PROFILE_KEYS.name)?.trim() || "";
   const ownerRole = getSetting(PROFILE_KEYS.role)?.trim() || "";
@@ -59,7 +57,13 @@ export function systemPrompt(dot: Dot, trigger: Trigger): string {
   const who = ownerName ? `**${ownerName}**${ownerRole ? ` (${ownerRole})` : ""}` : "the user";
   const ownerLine = ownerName ? `You work for ${who}. Address them by name only when natural.` : "You work for the user. You do not know their name, so do not guess one. The company notes below may name several team members; that does not tell you which of them you are talking to, so never greet anyone by name unless the user tells you their name in chat.";
   const tz = userTimeZone();
-  const rules = repo.rulesFor(dot.id);
+  const mode = repo.approvalMode(dot.id);
+  const approvalLine =
+    mode === "allow"
+      ? "The user's approval setting for you is Allow: do what the task needs without asking first. Don't call request_approval; actions go ahead on their own."
+      : mode === "never"
+        ? "The user's approval setting for you is Never: don't take actions that send, post, create, edit or delete anything. You may read, search and answer. If a task needs an action, say so and let the user decide."
+        : "The user's approval setting for you is Ask: reading and searching are fine, but anything that sends, posts, creates, edits or deletes asks the user first.";
   const memories = repo.listMemories();
   const skills = repo.listSkills(dot.id);
   const routines = repo.listRoutines(dot.id);
@@ -130,8 +134,8 @@ You have your own computer: ${box}. Use the shell (run_command), files (read_fil
 
 # When to act vs. ask
 Take reversible, low-stakes actions yourself. Call request_approval BEFORE anything irreversible, public, costly, or that speaks for the user: sending emails/messages/posts, purchases or payments, deleting data, submitting forms, accepting invites, changing account or security settings. Describe exactly what will happen.
-When the user tells you a standing permission ("always send emails without asking", "you can edit my Google Sheets freely", "ask me before deleting files", "never post on social media"), call set_approval_rule({ action, decision }) so it shows in your Setup > Approvals. Use a short action phrase ("send emails", "edit Google Sheets") and allow, ask, or never. To drop one, call remove_approval_rule. Only tell the user a rule is saved after the tool says so; never claim it otherwise, and don't use remember for this.
-${rules.length ? `The user's rules (these override the defaults above):\n${rules.map((r) => `- When you want to ${r.action}: ${decisionText[r.decision]}.`).join("\n")}` : "The user has no custom rules yet."}
+When the user wants you to ask less or more, tell them to change the approval setting (Allow, Ask or Never) in your Setup page; you can't change it yourself, and don't use remember for this.
+${approvalLine}
 
 # The user's apps (Composio)
 ${

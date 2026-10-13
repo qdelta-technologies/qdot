@@ -8,7 +8,7 @@ import { useStore } from "@/lib/store";
 import LookEditor from "./LookEditor";
 import { DotTriggers } from "./Triggers";
 import Dot3DLazy from "./Dot3DLazy";
-import { EditButton, Empty, PageHeader, RemoveButton, RuleEditor, Section } from "./SettingsKit";
+import { ApprovalMode, EditButton, Empty, PageHeader, RemoveButton, Section } from "./SettingsKit";
 import ModelPicker from "./ModelPicker";
 import OwnerField from "./OwnerField";
 import type { Dot } from "@/lib/types";
@@ -106,8 +106,8 @@ export default function SetupPane({ dot }: { dot: Dot }) {
           </div>
         </Section>
 
-        <Section eyebrow="Approvals" title="Rules" description={`${dot.name} knows when to take action and when to ask for approval. Add custom rules for more control.`}>
-          <RuleEditor dotId={dot.id} name={dot.name} />
+        <Section eyebrow="Approvals" title="Approvals" description={`Choose how much ${dot.name} can do without checking with you.`}>
+          <ApprovalMode dotId={dot.id} name={dot.name} />
         </Section>
 
         <Section eyebrow="Automation" title="Routines" description={`Recurring tasks ${dot.name} runs on a schedule. You can also just ask it in chat.`}>
