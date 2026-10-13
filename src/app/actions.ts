@@ -273,8 +273,15 @@ export async function takeOverComputer(dotId: string): Promise<{ url: string | n
 }
 
 /** Start the dot's computer from the Computer tab (Refresh), without pausing the dot. */
-export async function wakeComputer(dotId: string) {
-  await computer.wake(dotId);
+export async function wakeComputer(dotId: string): Promise<{ error?: string }> {
+  try {
+    await computer.wake(dotId);
+    return {};
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Playwright says "Executable doesn't exist" when no browser is installed on the server
+    return { error: /executable doesn't exist|browserType\.launch/i.test(msg) ? "This server has no browser installed yet, so the dot can't open one here." : msg.split(/\r?\n/)[0] };
+  }
 }
 
 export async function handBackComputer(dotId: string) {

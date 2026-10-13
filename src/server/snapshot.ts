@@ -21,6 +21,7 @@ export function computerInfo(): ComputerInfo {
   return {
     mode: defaultMode(),
     docker: dockerAvailable(),
+    hosted: Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID),
     image: BOX_IMAGE,
     model: m.defaultModel,
     models: m.available,

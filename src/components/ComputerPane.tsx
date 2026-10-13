@@ -69,7 +69,13 @@ export default function ComputerPane({ dot }: { dot: Dot }) {
               className="btn-secondary h-8 px-3 text-[13px]"
               disabled={pending}
               onClick={() =>
-                cloud ? setNonce(Date.now()) : start(async () => (await wakeComputer(dot.id), setWatching(true), setNonce(Date.now())))
+                cloud ? setNonce(Date.now()) : start(async () => {
+                    setError(null);
+                    const r = await wakeComputer(dot.id);
+                    if (r.error) return setError(r.error);
+                    setWatching(true);
+                    setNonce(Date.now());
+                  })
               }
             >
               <RefreshCw className="size-3.5" strokeWidth={1.75} /> Refresh
@@ -135,7 +141,7 @@ export default function ComputerPane({ dot }: { dot: Dot }) {
               <span
                 className={`ml-auto rounded-xs px-1.5 py-0.5 font-mono text-[11px] tracking-wider uppercase ${computer.mode === "local" ? "bg-warning/15 text-warning" : "bg-success/12 text-success"}`}
               >
-                {computer.mode === "cloud" ? "Cloud" : computer.mode === "docker" ? "Container" : "This Mac"}
+                {computer.mode === "cloud" ? "Cloud" : computer.mode === "docker" ? "Container" : computer.hosted ? "Server" : "This Mac"}
               </span>
             </div>
             <p className="mt-2 text-body-sm text-foreground/55">
@@ -151,7 +157,7 @@ export default function ComputerPane({ dot }: { dot: Dot }) {
                 </>
               ) : (
                 <>
-                  A sandbox folder on this Mac; commands ask first.{" "}
+                  {computer.hosted ? "A sandbox folder on the server; commands ask first." : "A sandbox folder on this Mac; commands ask first."}{" "}
                   <Link href="/settings#cloud-key" className="underline underline-offset-2 hover:text-foreground">
                     Add an E2B key
                   </Link>{" "}
@@ -178,6 +184,7 @@ export default function ComputerPane({ dot }: { dot: Dot }) {
             </div>
           </section>
 
+          {!computer.hosted && (
           <section className="surface p-5">
             <div className="flex items-center gap-2">
               <Laptop className="size-4 text-foreground/50" strokeWidth={1.5} />
@@ -198,6 +205,7 @@ export default function ComputerPane({ dot }: { dot: Dot }) {
                 : `${dot.name} can't access this Mac. Allow it to let your dot open files and run tasks here.`}
             </p>
           </section>
+          )}
         </div>
       </div>
     </div>

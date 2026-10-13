@@ -166,6 +166,7 @@ export type ModelMeta = {
 export type ComputerInfo = {
   mode: "cloud" | "docker" | "local"; // where dots' computers run by default
   docker: boolean;
+  hosted: boolean; // the server runs on a host such as Railway, not on someone's own Mac
   image: string;
   model: string; // default model for dots without their own choice
   models: string[]; // models the API key can use
