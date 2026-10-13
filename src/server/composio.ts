@@ -219,7 +219,7 @@ const NAMES: Record<string, string> = {
   github: "GitHub", linkedin: "LinkedIn", metaads: "Meta Ads", posthog: "PostHog", serpapi: "SerpApi", youtube: "YouTube",
   google_search_console: "Search Console", outlook: "Outlook", notion: "Notion", slack: "Slack", linear: "Linear", figma: "Figma", reddit: "Reddit", ahrefs: "Ahrefs",
 };
-const prettyName = (slug: string) => NAMES[slug] ?? slug.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+export const prettyName = (slug: string) => NAMES[slug] ?? slug.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 // ---------- calling tools ----------
 
@@ -522,6 +522,16 @@ export async function startConnect(toolkit: string, originOverride?: string, ali
     },
   };
 }
+
+/** The connected app a tool belongs to, from its slug (GOOGLEDRIVE_LIST_FILES → googledrive). Null when it isn't one of the connected apps. */
+export function toolkitOfSlug(slug: string): string | null {
+  const s = slug.toLowerCase();
+  return [...st.connected].filter((k) => s.startsWith(`${k.replace(/[-\s]+/g, "_")}_`)).sort((a, b) => b.length - a.length)[0] ?? null;
+}
+
+/** A readable name for one connected account. */
+export const accountName = (a: AppAccount) => a.label ?? a.alias ?? "Default account";
+export const isActiveAccount = (a: AppAccount) => /^active$/i.test(a.status);
 
 /** The `toolkits` argument of COMPOSIO_MANAGE_CONNECTIONS as a list, even when a model sends it as text. */
 export function toolkitList(args: Record<string, unknown>): { action?: string }[] {

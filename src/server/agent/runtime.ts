@@ -211,7 +211,8 @@ export async function resolveCard(messageId: string, choice: "approve" | "deny" 
 
   const approved = choice === "approve" || choice === "always";
   const status: CardData["status"] = choice === "answer" ? "answered" : approved ? "approved" : "denied";
-  repo.updateMessage(messageId, { card: { ...card, status, answer } });
+  const shown = card.kind === "account" ? (card.choices?.find((c) => c.value === answer)?.label ?? answer) : answer;
+  repo.updateMessage(messageId, { card: { ...card, status, answer: shown } });
   repo.settleWaiting(dot.id); // answering the last open card must not leave the dot labelled "waiting"
   if (choice === "always" && card.ruleAction) {
     // Save the short "app: action" kind, not the one-off wording of this call, so the rule also matches next time.
@@ -220,6 +221,8 @@ export async function resolveCard(messageId: string, choice: "approve" | "deny" 
     if (same) repo.updateRule(same.id, { action: same.action, decision: "allow" });
     else repo.addRule({ dotId: dot.id, action, decision: "allow" });
   }
+
+  if (card.kind === "connect" && approved && card.toolkit) await linkAfterConnect(dot.id, card.toolkit, card.alias).catch(() => {});
 
   const convId = msg.conversationId ?? repo.latestConversationId(dot.id);
   const pending = parsePending(repo.threadOf(convId).pending);
@@ -241,7 +244,8 @@ export async function resolveCard(messageId: string, choice: "approve" | "deny" 
     } else {
       const def = findTool(call.name);
       let output: string;
-      if (def?.pause === "question") output = `The user answered: ${answer ?? ""}`;
+      if (card.kind === "account") output = accountOutcome(dot, card, answer);
+      else if (def?.pause === "question") output = `The user answered: ${answer ?? ""}`;
       else if (def?.pause === "approval") output = approved ? "The user approved. Go ahead." : "The user denied this. Do not do it; tell them briefly what you'll do instead, if anything.";
       else if (def?.pause === "connect") output = approved ? "Connected. Continue with the task." : "The user chose not to connect this app right now. Continue without it or tell them what you need.";
       else if (approved && def?.execute) output = await execTool(dot, call, signal);
@@ -724,7 +728,27 @@ async function processCalls(dot: Dot, pending: Pending, signal: AbortSignal): Pr
 
     if (def.pause === "connect") {
       const toolkit = String(args.toolkit ?? "").trim().toLowerCase();
-      const started = await composio.startConnect(toolkit, undefined, typeof args.alias === "string" ? args.alias : null).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }));
+      const alias = typeof args.alias === "string" && args.alias.trim() && args.alias.trim().toLowerCase() !== "null" ? args.alias.trim() : null;
+      // Accounts of this app already connected in Settings: the user picks one for this dot, or adds a new one.
+      if (!alias) {
+        const library = await composio.listAppAccounts(toolkit).catch(() => ({ accounts: [] as composio.AppAccount[], raw: "" }));
+        const live = library.accounts.filter(composio.isActiveAccount);
+        if (live.length) {
+          const app = composio.prettyName(toolkit);
+          const current = repo.appAccount(dot.id, toolkit);
+          const using = current ? live.find((a) => a.id === current || a.alias === current) : null;
+          return pauseFor(dot, pending, {
+            kind: "account", status: "pending", toolkit,
+            title: `Which ${app} account should ${dot.name} use?`,
+            detail: using ? `${dot.name} currently uses ${composio.accountName(using)}. Picking another replaces it.` : undefined,
+            choices: [
+              ...live.map((a) => ({ value: a.id, label: composio.accountName(a), note: a.alias && a.alias !== composio.accountName(a) ? a.alias : undefined })),
+              { value: NEW_ACCOUNT, label: `Add a new ${app} account` },
+            ],
+          });
+        }
+      }
+      const started = await composio.startConnect(toolkit, undefined, alias).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }));
       if ("error" in started) {
         pending.outputs.push({ type: "function_call_output", call_id: call.call_id, output: `Couldn't start connecting ${toolkit}: ${started.error}` });
         continue;
@@ -734,7 +758,7 @@ async function processCalls(dot: Dot, pending: Pending, signal: AbortSignal): Pr
         continue;
       }
       pauseFor(dot, pending, {
-        kind: "connect", status: "pending", title: `Connect ${started.name}`, toolkit, url: started.url,
+        kind: "connect", status: "pending", title: `Connect ${started.name}`, toolkit, url: started.url, ...(alias ? { alias } : {}),
         detail: `${dot.name} needs access to your ${started.name} to continue. You'll sign in with ${started.name} directly; ${dot.name} never sees your password.`,
       });
       const cardId = pending.cardId!;
@@ -792,6 +816,30 @@ async function processCalls(dot: Dot, pending: Pending, signal: AbortSignal): Pr
   }
   savePending(dot.id, pending);
   return false;
+}
+
+/** The choice on an account card that means "connect a new account". */
+const NEW_ACCOUNT = "__new__";
+
+/** What the dot is told after the user answers an account card. Linking happens here. */
+function accountOutcome(dot: Dot, card: CardData, answer?: string): string {
+  const toolkit = card.toolkit ?? "";
+  const app = composio.prettyName(toolkit);
+  if (!answer) return `The user did not pick an account. Don't link anything; continue without ${app}.`;
+  if (answer === NEW_ACCOUNT) {
+    const alias = `${toolkit}-${card.choices?.length ?? 2}`;
+    return `The user wants to add a NEW ${app} account. Call app_connect now with toolkit "${toolkit}" and alias "${alias}". Don't ask anything else first.`;
+  }
+  repo.setAppAccount(dot.id, toolkit, answer);
+  const picked = card.choices?.find((c) => c.value === answer);
+  return `Linked ${picked?.label ?? "the account"} to you for ${app}. Continue the task with it.`;
+}
+
+/** A newly connected account becomes this dot's account for that app. */
+async function linkAfterConnect(dotId: string, toolkit: string, alias?: string) {
+  const live = (await composio.listAppAccounts(toolkit)).accounts.filter(composio.isActiveAccount);
+  const mine = alias ? live.find((a) => a.alias === alias) : live.length === 1 ? live[0] : null;
+  if (mine) repo.setAppAccount(dotId, toolkit, mine.id);
 }
 
 function pauseFor(dot: Dot, pending: Pending, card: CardData): true {

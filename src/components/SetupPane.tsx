@@ -8,7 +8,7 @@ import { useStore } from "@/lib/store";
 import LookEditor from "./LookEditor";
 import { DotTriggers } from "./Triggers";
 import Dot3DLazy from "./Dot3DLazy";
-import { AppAccountPicker, ApprovalMode, EditButton, Empty, PageHeader, RemoveButton, Section } from "./SettingsKit";
+import { ApprovalMode, LinkedAccounts, EditButton, Empty, PageHeader, RemoveButton, Section } from "./SettingsKit";
 import ModelPicker from "./ModelPicker";
 import OwnerField from "./OwnerField";
 import type { Dot } from "@/lib/types";
@@ -110,9 +110,9 @@ export default function SetupPane({ dot }: { dot: Dot }) {
           <ApprovalMode dotId={dot.id} name={dot.name} />
         </Section>
 
-        <AppAccountPicker dotId={dot.id} name={dot.name} toolkit="instagram" appName="Instagram" />
-
-        <AppAccountPicker dotId={dot.id} name={dot.name} toolkit="linkedin" appName="LinkedIn" />
+        <Section eyebrow="Apps" title="Accounts" description={`The apps ${dot.name} can use, and the account for each.`}>
+          <LinkedAccounts dotId={dot.id} name={dot.name} />
+        </Section>
 
         <Section eyebrow="Automation" title="Routines" description={`Recurring tasks ${dot.name} runs on a schedule. You can also just ask it in chat.`}>
           <div className="space-y-3">

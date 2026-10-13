@@ -57,6 +57,7 @@ export function systemPrompt(dot: Dot, trigger: Trigger): string {
   const who = ownerName ? `**${ownerName}**${ownerRole ? ` (${ownerRole})` : ""}` : "the user";
   const ownerLine = ownerName ? `You work for ${who}. Address them by name only when natural.` : "You work for the user. You do not know their name, so do not guess one. The company notes below may name several team members; that does not tell you which of them you are talking to, so never greet anyone by name unless the user tells you their name in chat.";
   const tz = userTimeZone();
+  const linked = repo.linkedApps(dot.id).map((l) => l.toolkit).join(", ") || "none yet";
   const mode = repo.approvalMode(dot.id);
   const approvalLine =
     mode === "allow"
@@ -140,7 +141,7 @@ ${approvalLine}
 # The user's apps (Composio)
 ${
   composioSignedIn()
-    ? `Connected: ${composioApps().filter((t) => t.connected).map((t) => t.name).join(", ") || "none yet"}. For email, calendar, chat, docs, code, CRM, and other apps, use COMPOSIO_SEARCH_TOOLS to find the right tools, then COMPOSIO_MULTI_EXECUTE_TOOL to run them, instead of the browser. Reading runs automatically; anything that sends, posts, creates, edits, or deletes asks the user first on its own, so don't also call request_approval for it. If an app isn't connected, call app_connect.`
+    ? `Connected: ${composioApps().filter((t) => t.connected).map((t) => t.name).join(", ") || "none yet"}. For email, calendar, chat, docs, code, CRM, and other apps, use COMPOSIO_SEARCH_TOOLS to find the right tools, then COMPOSIO_MULTI_EXECUTE_TOOL to run them, instead of the browser. Reading runs automatically; anything that sends, posts, creates, edits, or deletes asks the user first on its own, so don't also call request_approval for it. If an app isn't connected, call app_connect. Apps linked to you: ${linked}. You can only use an app that is linked to you; if a task needs one that isn't, call app_connect so the user picks which account you use.`
     : "The user hasn't signed in to Composio yet. If a task needs their apps, tell them they can connect Composio in Settings → Apps, or use the browser."
 }
 
@@ -150,7 +151,7 @@ ${
   - **NEVER use browser or open_url to open login pages for standard apps.** Always use \`app_connect\` so Composio's official OAuth card is displayed.
   - **NEVER output tool names or pseudo-calls as text or code blocks** (e.g. do NOT output "COMPOSIO_MANAGE_CONNECTIONS", do NOT output "COMPOSIO_MULTI_EXECUTE_TOOL", do NOT output python/json code snippets of tool calls).
   - **NEVER ask multiple-choice questionnaires** ("Please respond with 1, 2, or 3"). Just initiate the connection or execute the requested task.
-- **Several accounts of one app** (for example two LinkedIn logins): Composio keeps every connection with an alias. To add another account, call app_connect with the toolkit AND a short alias (like "qdelta-linkedin"), even if the app is already connected. To see the accounts and aliases that exist, use COMPOSIO_MANAGE_CONNECTIONS with action list. When running an action with COMPOSIO_MULTI_EXECUTE_TOOL, set the account field on that tool item to the right alias or account id. If more than one account could apply and the user did not say which, ask first; never guess.
+- **One account per app**: You use exactly one account of each app. app_connect shows the user the accounts already connected so they pick one for you, or add a new one. If you already use an account of an app and the user wants another, call app_connect again; their pick replaces the current one. To drop an app from yourself, call unlink_app_account. Never ask the user in chat which account to use; the card does that.
 
 # Putting files into Google Drive or other apps
 - Files the user attaches are in your workspace at uploads/<name>. Some app tools cannot take file contents directly; they need a web address for the file.

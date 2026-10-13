@@ -357,6 +357,7 @@ Account: your connected LinkedIn account`,
   {
     name: "instagram_post",
     label: "Posting to Instagram",
+    precheck: async (_a, ctx) => (repo.appAccount(ctx.dot.id, "instagram") ? null : notLinked("instagram")),
     timeoutMs: 6 * 60_000,
     description:
       "Publish a photo or a Reel (video) to the user's connected Instagram account. Give the file's path (uploads/<name>), the exact caption the user wants, and kind: photo or reel. Needs an Instagram Business or Creator account. The user must approve it first.",
@@ -413,6 +414,7 @@ Account: your connected LinkedIn account`,
   {
     name: "instagram_collect_leads",
     label: "Collecting Instagram leads",
+    precheck: async (_a, ctx) => (repo.appAccount(ctx.dot.id, "instagram") ? null : notLinked("instagram")),
     timeoutMs: 4 * 60_000,
     description:
       "Save people who already reached out on the user's connected Instagram account as leads: those who commented on the account's recent posts, and optionally those who sent a direct message. Each lead keeps the exact comment or message as evidence. It cannot search for strangers.",
@@ -649,6 +651,18 @@ Account: your connected LinkedIn account`,
     execute: async (a) => (repo.deleteMemory(s(a.memory_id)), "Forgotten."),
   },
   {
+    name: "unlink_app_account",
+    label: "Unlinking an app",
+    description: "Unlink an app from yourself when the user asks (for example 'disconnect LinkedIn from you'). The account stays connected in Settings and can be linked again.",
+    parameters: obj({ toolkit: str("Toolkit slug, e.g. instagram, linkedin, gmail") }),
+    execute: async (a, ctx) => {
+      const toolkit = s(a.toolkit).trim().toLowerCase();
+      if (!repo.appAccount(ctx.dot.id, toolkit)) return `${composio.prettyName(toolkit)} isn't linked to you.`;
+      repo.setAppAccount(ctx.dot.id, toolkit, null);
+      return `Unlinked ${composio.prettyName(toolkit)}. You can't use it until the user links an account again.`;
+    },
+  },
+  {
     name: "save_skill",
     label: "Learning a skill",
     description: "Save a reusable skill: step-by-step markdown instructions for a task you'll repeat. Updates the skill if the name exists.",
@@ -801,7 +815,7 @@ TOOLS.push({
   name: "app_connect",
   label: "Connecting an app",
   description:
-    "Ask the user to connect one of their apps to Composio (shows a Connect card with a sign-in link) and wait until they finish. Use the exact toolkit slug from COMPOSIO_SEARCH_TOOLS. To add an ADDITIONAL account of an app that is already connected (for example a second LinkedIn login), also pass a short alias.",
+    "Link one of the user's apps to yourself. If accounts of that app are already connected, the user gets a card to pick which one you use (or add a new one); otherwise they get a sign-in link. You use one account per app. Use the exact toolkit slug from COMPOSIO_SEARCH_TOOLS. Pass an alias only when the user chose to add a NEW account of an app that already has others.",
   parameters: obj({
     toolkit: str("Toolkit slug, e.g. gmail, googlecalendar, slack, notion, github"),
     alias: nullableStr("Only to add another account of an already-connected app: a short label like \"qdelta-linkedin\". Otherwise null."),
@@ -810,13 +824,17 @@ TOOLS.push({
 });
 
 /** If a dot always uses one account of an app (set in its Setup page), every action on that app goes through it. The dot can't pick another. */
+function notLinked(toolkit: string): string {
+  return `${composio.prettyName(toolkit)} isn't linked to you yet. Call app_connect with toolkit "${toolkit}" so the user can pick which account you use, then try again.`;
+}
+
 function pinAccounts(args: Record<string, unknown>, dotId: string): Record<string, unknown> {
   const items = composio.executeItems(args);
   if (!items.length) return args;
   return {
     ...args,
     tools: items.map((i) => {
-      const toolkit = String(i.tool_slug ?? "").split("_")[0].toLowerCase();
+      const toolkit = composio.toolkitOfSlug(String(i.tool_slug ?? ""));
       const pinned = toolkit ? repo.appAccount(dotId, toolkit) : null;
       return pinned ? { ...i, account: pinned } : i;
     }),
@@ -837,9 +855,11 @@ function composioTools(): ToolDef[] {
       return {
         ...base,
         label: "Using your apps",
-        precheck: async (a) => {
+        precheck: async (a, ctx) => {
           for (const i of composio.executeItems(a)) {
             const slug = String(i.tool_slug ?? "");
+            const linkedTo = composio.toolkitOfSlug(slug);
+            if (linkedTo && !repo.appAccount(ctx.dot.id, linkedTo)) return notLinked(linkedTo);
             if (/^INSTAGRAM_(CREATE_MEDIA_CONTAINER|POST_IG_USER_MEDIA|POST_IG_USER_MEDIA_PUBLISH|CREATE_POST)/i.test(slug))
               return "Do not post to Instagram with these generic tools. Use the instagram_post tool (path, caption, kind). It checks the file and asks the user first.";
             if (/^GMAIL_(SEND|CREATE_EMAIL_DRAFT)/i.test(slug)) {

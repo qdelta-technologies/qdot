@@ -51,7 +51,7 @@ export type Dot = {
 
 export type MessageRole = "user" | "dot" | "activity" | "card" | "system";
 
-export type CardKind = "approval" | "question" | "connect";
+export type CardKind = "approval" | "question" | "connect" | "account";
 export type CardStatus = "pending" | "approved" | "denied" | "answered" | "expired";
 
 export type CardData = {
@@ -65,6 +65,8 @@ export type CardData = {
   ruleAction?: string; // natural-language action used if the user picks "Always allow"
   toolkit?: string; // connect cards: Composio toolkit slug
   url?: string; // connect cards: OAuth link
+  alias?: string; // connect cards: the name given to a new account, so it can be linked once connected
+  choices?: { value: string; label: string; note?: string }[]; // account cards: the accounts the user can link to this dot
 };
 
 /** A file attached to a message (uploaded by the user or shared by a dot). */

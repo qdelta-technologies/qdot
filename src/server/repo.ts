@@ -458,6 +458,14 @@ export function appAccount(dotId: string, toolkit: string): string | null {
   return getSetting(`${toolkit.toLowerCase()}_account:${dotId}`)?.trim() || null;
 }
 
+/** Every app this dot is linked to, with the account it uses. */
+export function linkedApps(dotId: string): { toolkit: string; account: string }[] {
+  const rows = db().prepare("SELECT key, value FROM settings WHERE key LIKE ?").all(`%_account:${dotId}`) as { key: string; value: string }[];
+  return rows
+    .filter((r) => r.key.endsWith(`_account:${dotId}`) && r.value.trim())
+    .map((r) => ({ toolkit: r.key.slice(0, r.key.length - `_account:${dotId}`.length), account: r.value.trim() }));
+}
+
 export function setAppAccount(dotId: string, toolkit: string, account: string | null) {
   setSetting(`${toolkit.toLowerCase()}_account:${dotId}`, account?.trim() || null);
 }

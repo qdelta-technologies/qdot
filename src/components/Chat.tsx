@@ -1276,13 +1276,32 @@ function CardRow({ m }: { m: Message }) {
     <div className="surface max-w-[580px] overflow-hidden rounded-2xl shadow-elevated">
       <div className="flex items-center gap-2 border-b border-black/[0.06] dark:border-white/[0.08] bg-popover px-4 py-2.5">
         <span className="size-2 rounded-full bg-warning" />
-        <span className="eyebrow">{card.kind === "question" ? "Question for you" : card.kind === "connect" ? "Connect an app" : "Needs your approval"}</span>
+        <span className="eyebrow">{card.kind === "question" ? "Question for you" : card.kind === "connect" ? "Connect an app" : card.kind === "account" ? "Choose an account" : "Needs your approval"}</span>
       </div>
       <div className="p-4">
         <div className="text-[15px] leading-snug font-medium">{card.title}</div>
         {card.detail && <div className="mt-1.5 text-body-sm whitespace-pre-wrap text-foreground/65">{card.detail}</div>}
 
         {card.kind === "connect" && <ConnectActions m={m} />}
+
+        {card.kind === "account" && (
+          <div className="mt-4 space-y-2">
+            {card.choices?.map((c) => (
+              <button
+                key={c.value}
+                className="flex w-full items-center gap-3 rounded-xl border border-black/10 px-3.5 py-2.5 text-left text-[14px] transition-colors hover:border-black/30 hover:bg-black/[0.03] disabled:opacity-60 dark:border-white/10 dark:hover:border-white/30 dark:hover:bg-white/[0.05]"
+                disabled={pending}
+                onClick={() => act("answer", c.value)}
+              >
+                <span className="min-w-0 flex-1 truncate font-medium">{c.label}</span>
+                {c.note && <span className="shrink-0 font-mono text-[11px] text-foreground/45">{c.note}</span>}
+              </button>
+            ))}
+            <button className="btn-quiet h-8 px-2 text-[13px]" disabled={pending} onClick={() => act("deny")}>
+              Not now
+            </button>
+          </div>
+        )}
 
         {card.kind === "approval" && (
           <div className="mt-4 flex flex-wrap items-center gap-2">

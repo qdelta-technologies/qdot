@@ -143,12 +143,22 @@ export async function setApprovalMode(dotId: string, mode: "allow" | "ask" | "ne
   if (mode === "allow" || mode === "ask" || mode === "never") repo.setApprovalMode(dotId, mode);
 }
 
-export async function getAppAccountChoice(dotId: string, toolkit: string): Promise<string | null> {
-  return repo.appAccount(dotId, toolkit);
+export type LinkedApp = { toolkit: string; name: string; logo: string; account: string };
+
+/** The apps linked to a dot, each with the name of the account it uses. */
+export async function getLinkedApps(dotId: string): Promise<LinkedApp[]> {
+  const links = repo.linkedApps(dotId);
+  return Promise.all(
+    links.map(async (l) => {
+      const found = await composio.listAppAccounts(l.toolkit).then((r) => r.accounts.find((a) => a.id === l.account || a.alias === l.account)).catch(() => undefined);
+      return { toolkit: l.toolkit, name: composio.prettyName(l.toolkit), logo: `https://logos.composio.dev/api/${l.toolkit}`, account: found ? composio.accountName(found) : "Account no longer connected" };
+    }),
+  );
 }
 
-export async function setAppAccountChoice(dotId: string, toolkit: string, account: string | null): Promise<void> {
-  repo.setAppAccount(dotId, toolkit, account);
+/** Unlink an app from a dot. The account stays connected in Settings. */
+export async function unlinkApp(dotId: string, toolkit: string): Promise<void> {
+  repo.setAppAccount(dotId, toolkit, null);
 }
 
 export async function addRule(dotId: string | null, action: string, decision: RuleDecision) {
@@ -575,7 +585,11 @@ export async function refreshApps() {
 export async function confirmConnectCard(messageId: string): Promise<boolean> {
   const card = repo.getMessage(messageId)?.card;
   if (!card?.toolkit) return false;
-  const ok = await composio.isConnected(card.toolkit).catch(() => false);
+  const toolkit = card.toolkit;
+  // A new account of an app that already has others: wait for that account, not just the app.
+  const ok = card.alias
+    ? await composio.listAppAccounts(toolkit).then((r) => r.accounts.some((a) => a.alias === card.alias && composio.isActiveAccount(a))).catch(() => false)
+    : await composio.isConnected(toolkit).catch(() => false);
   if (ok) await runtime.resolveCard(messageId, "approve");
   return ok;
 }
