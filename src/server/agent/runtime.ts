@@ -746,7 +746,7 @@ async function processCalls(dot: Dot, pending: Pending, signal: AbortSignal): Pr
             title: `Which ${app} account should ${dot.name} use?`,
             detail: using ? `${dot.name} currently uses ${composio.accountName(using)}. Picking another replaces it.` : undefined,
             choices: [
-              ...live.map((a) => ({ value: a.id, label: composio.accountName(a), note: a.alias && a.alias !== composio.accountName(a) ? a.alias : undefined })),
+              ...live.map((a) => ({ value: a.id, label: composio.accountName(a), note: a.alias ? (a.alias !== composio.accountName(a) ? a.alias : undefined) : "no alias" })),
               { value: NEW_ACCOUNT, label: `Add a new ${app} account` },
             ],
           });

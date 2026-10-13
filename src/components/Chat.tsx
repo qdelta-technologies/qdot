@@ -1263,6 +1263,13 @@ const CARD_META: Record<CardKind, { label: string; Icon: typeof Plug; tone: stri
 /** Visible keyboard focus for the card's custom buttons. */
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60";
 
+/** The card's heading without the internal account alias: "Connect Gmail (gmail-3)" reads "Add a new Gmail account". */
+function cardHeading(card: NonNullable<Message["card"]>): string {
+  if (card.kind !== "connect") return card.title;
+  const app = card.title.replace(/^Connect\s+/i, "").replace(/\s*\([^)]*\)\s*$/, "");
+  return card.alias ? "Add a new " + app + " account" : "Connect " + app;
+}
+
 /** One plain sentence for what happened to a card that has been answered. */
 function cardResult(card: NonNullable<Message["card"]>): string {
   if (card.status === "expired") return "Expired";
@@ -1289,12 +1296,12 @@ function CardRow({ m }: { m: Message }) {
     const Icon = card.status === "denied" ? X : card.status === "expired" ? Clock : Check;
     const tone = good ? "bg-success/15 text-success" : card.status === "denied" ? "bg-destructive/10 text-destructive" : "bg-black/[0.06] text-foreground/45 dark:bg-white/[0.08]";
     return (
-      <div className="flex max-w-[580px] items-start gap-3 rounded-xl border border-black/[0.06] bg-card/60 px-3.5 py-2.5 dark:border-white/[0.08]">
+      <div className="flex max-w-[500px] items-start gap-3 rounded-xl border border-black/[0.06] bg-card/60 px-3.5 py-2.5 dark:border-white/[0.08]">
         <span className={"mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full " + tone}>
           <Icon className="size-3" strokeWidth={2.25} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-body-sm font-medium text-foreground/70">{card.title}</div>
+          <div className="line-clamp-2 text-body-sm font-medium text-foreground/70">{cardHeading(card)}</div>
           <div className="text-caption text-foreground/50">{cardResult(card)}</div>
         </div>
       </div>
@@ -1306,8 +1313,8 @@ function CardRow({ m }: { m: Message }) {
   const Spin = <Loader2 className="size-4 animate-spin" aria-hidden="true" />;
 
   return (
-    <section aria-labelledby={titleId} className="surface qdot-card-in w-full max-w-[580px] overflow-hidden rounded-2xl shadow-elevated">
-      <header className="flex items-center gap-2.5 border-b border-black/[0.06] bg-popover px-4 py-2.5 dark:border-white/[0.08]">
+    <section aria-labelledby={titleId} className="surface qdot-card-in w-full max-w-[500px] overflow-hidden rounded-2xl shadow-elevated">
+      <header className="flex items-center gap-2.5 border-b border-black/[0.06] bg-popover px-3.5 py-2 dark:border-white/[0.08]">
         <span className={"flex size-6 shrink-0 items-center justify-center rounded-full " + meta.tone}>
           <meta.Icon className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
         </span>
@@ -1318,9 +1325,9 @@ function CardRow({ m }: { m: Message }) {
         </span>
       </header>
 
-      <div className="p-4 sm:p-5">
-        <h3 id={titleId} className="text-[16px] leading-snug font-medium">
-          {card.title}
+      <div className="p-3.5 sm:p-4">
+        <h3 id={titleId} className="text-[15px] leading-snug font-medium">
+          {cardHeading(card)}
         </h3>
         {card.detail &&
           (card.kind === "approval" ? (
@@ -1344,7 +1351,7 @@ function CardRow({ m }: { m: Message }) {
                     disabled={pending}
                     onClick={() => act("answer", c.value)}
                     className={
-                      "flex min-h-[52px] w-full items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors disabled:opacity-60 " +
+                      "flex min-h-[46px] w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors disabled:opacity-60 " +
                       (isNew
                         ? "border-dashed border-black/20 text-foreground/75 hover:border-black/40 hover:bg-black/[0.03] dark:border-white/20 dark:hover:border-white/40 dark:hover:bg-white/[0.05] "
                         : "border-black/10 hover:border-black/30 hover:bg-black/[0.03] dark:border-white/10 dark:hover:border-white/30 dark:hover:bg-white/[0.05] ") +
@@ -1352,12 +1359,12 @@ function CardRow({ m }: { m: Message }) {
                     }
                   >
                     {isNew ? (
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.08]">
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.08]">
                         <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
                       </span>
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={"https://logos.composio.dev/api/" + (card.toolkit ?? "")} alt="" className="size-8 shrink-0 rounded-full border border-black/10 bg-card object-contain p-1.5 dark:border-white/10" />
+                      <img src={"https://logos.composio.dev/api/" + (card.toolkit ?? "")} alt="" className="size-7 shrink-0 rounded-full border border-black/10 bg-card object-contain p-1.5 dark:border-white/10" />
                     )}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium">{c.label}</span>
@@ -1378,12 +1385,12 @@ function CardRow({ m }: { m: Message }) {
         )}
 
         {card.kind === "approval" && (
-          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <button type="button" className={"btn-primary h-10 w-full sm:w-auto sm:px-5 " + FOCUS} disabled={pending} onClick={() => act("approve")}>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button type="button" className={"btn-primary h-9 w-full sm:w-auto sm:px-5 " + FOCUS} disabled={pending} onClick={() => act("approve")}>
               {busy === "approve" && Spin}
               Approve
             </button>
-            <button type="button" className={"btn-secondary h-10 w-full sm:w-auto sm:px-5 " + FOCUS} disabled={pending} onClick={() => act("deny")}>
+            <button type="button" className={"btn-secondary h-9 w-full sm:w-auto sm:px-5 " + FOCUS} disabled={pending} onClick={() => act("deny")}>
               {busy === "deny" && Spin}
               Deny
             </button>
@@ -1396,7 +1403,7 @@ function CardRow({ m }: { m: Message }) {
             {!!card.options?.length && (
               <div className="flex flex-wrap gap-2">
                 {card.options.map((o) => (
-                  <button key={o} type="button" className={"btn-secondary h-10 px-4 " + FOCUS} disabled={pending} onClick={() => act("answer", o)}>
+                  <button key={o} type="button" className={"btn-secondary h-9 px-4 " + FOCUS} disabled={pending} onClick={() => act("answer", o)}>
                     {busy === "answer:" + o && Spin}
                     {o}
                   </button>
@@ -1410,8 +1417,8 @@ function CardRow({ m }: { m: Message }) {
                 if (answer.trim()) act("answer", answer.trim());
               }}
             >
-              <input className="field h-10" aria-label="Your own answer" placeholder={card.options?.length ? "Or type your own answer" : "Type your answer"} value={answer} onChange={(e) => setAnswer(e.target.value)} />
-              <button className={"btn-primary h-10 px-4 " + FOCUS} disabled={pending || !answer.trim()}>
+              <input className="field h-9" aria-label="Your own answer" placeholder={card.options?.length ? "Or type your own answer" : "Type your answer"} value={answer} onChange={(e) => setAnswer(e.target.value)} />
+              <button className={"btn-primary h-9 px-4 " + FOCUS} disabled={pending || !answer.trim()}>
                 Send
               </button>
             </form>
@@ -1426,10 +1433,10 @@ function ConnectActions({ m }: { m: Message }) {
   const card = m.card!;
   const [pending, start] = useTransition();
   const [notYet, setNotYet] = useState(false);
-  const app = card.title.replace(/^Connect\s+/i, "");
+  const app = card.title.replace(/^Connect\s+/i, "").replace(/\s*\([^)]*\)\s*$/, "");
   return (
     <div className="mt-4 space-y-3">
-      <button type="button" className={"btn-primary h-10 w-full sm:w-auto sm:px-5 " + FOCUS} disabled={!card.url} onClick={() => window.open(card.url, "_blank", "noopener")}>
+      <button type="button" className={"btn-primary h-9 w-full sm:w-auto sm:px-5 " + FOCUS} disabled={!card.url} onClick={() => window.open(card.url, "_blank", "noopener")}>
         <Plug className="size-4" strokeWidth={1.75} aria-hidden="true" />
         Sign in to {app}
         <ExternalLink className="size-3.5 opacity-60" strokeWidth={1.75} aria-hidden="true" />
