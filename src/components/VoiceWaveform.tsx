@@ -166,7 +166,7 @@ export function VoiceInputPill({
   return (
     <div
       ref={containerRef}
-      className="relative flex h-[52px] sm:h-14 w-full items-center justify-between rounded-full bg-[#212121] px-2.5 sm:px-3 shadow-xl border border-white/[0.06] select-none transition-all"
+      className="relative flex h-[52px] sm:h-14 w-full items-center justify-between rounded-full bg-card dark:bg-[#212121] px-2.5 sm:px-3 shadow-xl border border-black/10 dark:border-white/[0.06] select-none transition-all"
     >
       {/* 1. Left: Cancel Button (X) */}
       <button
@@ -174,7 +174,7 @@ export function VoiceInputPill({
         onClick={onCancel}
         aria-label="Cancel voice recording"
         title="Cancel voice input"
-        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/15 text-white/80 hover:text-white transition-all active:scale-95 cursor-pointer"
+        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-black/[0.06] hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-foreground/70 hover:text-foreground dark:text-white/80 dark:hover:text-white transition-all active:scale-95 cursor-pointer"
       >
         <X className="size-4" strokeWidth={2} />
       </button>
@@ -192,7 +192,7 @@ export function VoiceInputPill({
             return (
               <span
                 key={idx}
-                className="w-[3px] rounded-full bg-white transition-all duration-75"
+                className="w-[3px] rounded-full bg-foreground dark:bg-white transition-all duration-75"
                 style={{
                   height: `${barHeight}px`,
                   opacity,
@@ -211,9 +211,9 @@ export function VoiceInputPill({
           onClick={onStop}
           aria-label="Stop recording and keep text"
           title="Done speaking (keep text in box)"
-          className="flex size-9 items-center justify-center rounded-full bg-white/10 hover:bg-white/15 text-white transition-all active:scale-95 cursor-pointer"
+          className="flex size-9 items-center justify-center rounded-full bg-black/[0.06] hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-foreground dark:text-white transition-all active:scale-95 cursor-pointer"
         >
-          <span className="size-3.5 rounded-[3px] bg-white block" />
+          <span className="size-3.5 rounded-[3px] bg-foreground dark:bg-white block" />
         </button>
 
         {/* Send Button (Amber / Gold circle with white ArrowUp) */}
