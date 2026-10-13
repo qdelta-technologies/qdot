@@ -11,7 +11,6 @@ import Dot3DLazy from "./Dot3DLazy";
 import { EditButton, Empty, PageHeader, RemoveButton, RuleEditor, Section } from "./SettingsKit";
 import ModelPicker from "./ModelPicker";
 import OwnerField from "./OwnerField";
-import { isProtectedDot } from "@/lib/protectedDots";
 import type { Dot } from "@/lib/types";
 
 const SCHEDULES = [
@@ -48,7 +47,6 @@ export default function SetupPane({ dot }: { dot: Dot }) {
   const [skillError, setSkillError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -292,23 +290,13 @@ export default function SetupPane({ dot }: { dot: Dot }) {
         <Section eyebrow="Danger zone" title={`Delete ${dot.name}`} description="Removes its chat, memory, routines, triggers, and computer. This can't be undone.">
           {confirmDelete ? (
             <div className="flex flex-col gap-2">
-              {isProtectedDot(dot.name) && (
-                <input
-                  type="password"
-                  className="field max-w-xs"
-                  placeholder="Team password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  autoFocus
-                />
-              )}
               {deleteError && <p className="text-body-sm text-destructive">{deleteError}</p>}
               <div className="flex items-center gap-2">
                 <button
                   className="btn bg-destructive text-card hover:opacity-90"
                   onClick={() =>
                     start(async () => {
-                      const err = await actions.deleteDot(dot.id, deletePassword);
+                      const err = await actions.deleteDot(dot.id);
                       if (err) setDeleteError(err);
                       else router.push("/");
                     })
@@ -320,7 +308,6 @@ export default function SetupPane({ dot }: { dot: Dot }) {
                   className="btn-quiet"
                   onClick={() => {
                     setConfirmDelete(false);
-                    setDeletePassword("");
                     setDeleteError(null);
                   }}
                 >
