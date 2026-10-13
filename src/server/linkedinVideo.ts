@@ -1,5 +1,5 @@
 import "server-only";
-import { executeTool, runWorkbench } from "./composio";
+import { executeTool, listAppAccounts, runWorkbench } from "./composio";
 
 // Posting a video to LinkedIn. Composio's ready-made LinkedIn tools only cover text and images, so this runs LinkedIn's own
 // video steps (announce the upload, send the bytes in pieces, finish it, create the post) through Composio's workbench,
@@ -13,6 +13,7 @@ import requests, json, inspect, re, sys
 URL = __URL__
 TEXT = __TEXT__
 AUTHOR = __AUTHOR__
+CONNECTED = __ACCOUNT__
 TITLE = __TITLE__
 VERSIONS = ["202510", "202509", "202506", "202504", "202411"]
 
@@ -22,6 +23,8 @@ def say(step, msg):
 def px(method, endpoint, body=None, headers=None, query=None):
     sig = inspect.signature(proxy_execute).parameters
     kw = dict(method=method, endpoint=endpoint, toolkit="linkedin")
+    if CONNECTED and "connected_account_id" in sig:
+        kw["connected_account_id"] = CONNECTED
     if body is not None:
         kw["body"] = body
     if query:
@@ -56,6 +59,9 @@ def as_dict(x):
         return {}
 
 say(0, "helper signature: " + str(inspect.signature(proxy_execute)))
+if CONNECTED and "connected_account_id" not in inspect.signature(proxy_execute).parameters:
+    say("STOP", "this LinkedIn connection cannot be told which account to use, so nothing was posted")
+    sys.exit(0)
 
 r = requests.get(URL, timeout=120)
 r.raise_for_status()
@@ -145,10 +151,10 @@ elif not err:
 export type LinkedInVideoResult = { ok: boolean; link: string | null; log: string };
 
 /** The signed-in LinkedIn member as a person URN, read through the same connection. */
-async function authorUrn(): Promise<string | null> {
+async function authorUrn(account?: string | null): Promise<string | null> {
   for (const slug of ["LINKEDIN_GET_MY_INFO", "LINKEDIN_GET_USER_INFO"]) {
     try {
-      const out = await executeTool(slug, {});
+      const out = await executeTool(slug, {}, account);
       const urn = out.match(/urn:li:person:[A-Za-z0-9_-]+/)?.[0];
       if (urn) return urn;
       const id = out.match(/"(?:sub|id)"\s*:\s*"([A-Za-z0-9_-]{6,})"/)?.[1];
@@ -160,13 +166,20 @@ async function authorUrn(): Promise<string | null> {
   return null;
 }
 
-export async function postVideo(url: string, text: string, title: string, size: number): Promise<LinkedInVideoResult> {
+export async function postVideo(url: string, text: string, title: string, size: number, account?: string | null): Promise<LinkedInVideoResult> {
   if (size > MAX_BYTES) return { ok: false, link: null, log: `That video is ${(size / 1048576).toFixed(0)} MB. The limit here is ${MAX_BYTES / 1048576} MB.` };
-  const author = await authorUrn();
+  const author = await authorUrn(account);
+  // The workbench needs the account's id, not its alias.
+  let accountId = "";
+  if (account) {
+    accountId = (await listAppAccounts("linkedin")).accounts.find((a) => a.alias === account || a.id === account)?.id ?? "";
+    if (!accountId) return { ok: false, link: null, log: `The LinkedIn account "${account}" chosen for this dot is no longer connected. Pick another in its Setup page.` };
+  }
   if (!author) return { ok: false, link: null, log: "Couldn't read the LinkedIn member id for the connected account." };
   const code = SCRIPT.replace("__URL__", JSON.stringify(url))
     .replace("__TEXT__", JSON.stringify(text))
     .replace("__AUTHOR__", JSON.stringify(author))
+    .replace("__ACCOUNT__", JSON.stringify(accountId))
     .replace("__TITLE__", JSON.stringify(title));
   const raw = await runWorkbench(code, "QDot is posting a video to LinkedIn");
   const lines = raw.split("\n").filter((l) => l.includes("QDOT_STEP") || /error|traceback|exception/i.test(l));

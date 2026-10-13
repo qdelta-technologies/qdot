@@ -160,14 +160,14 @@ export function ApprovalMode({ dotId, name }: { dotId: string; name: string }) {
   );
 }
 
-/** Which connected Instagram account a dot posts from and reads. Shown when more than one is connected. */
-export function InstagramAccount({ dotId, name }: { dotId: string; name: string }) {
+/** Which connected account of an app (Instagram, LinkedIn…) a dot always uses. Shown when more than one is connected. */
+export function AppAccountPicker({ dotId, name, toolkit, appName }: { dotId: string; name: string; toolkit: string; appName: string }) {
   const [accounts, setAccounts] = useState<{ id: string; alias: string | null; label: string | null }[] | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
   const [, start] = useTransition();
   useEffect(() => {
     let live = true;
-    void Promise.all([actions.getAppAccounts("instagram"), actions.getInstagramAccount(dotId)]).then(([r, saved]) => {
+    void Promise.all([actions.getAppAccounts(toolkit), actions.getAppAccountChoice(dotId, toolkit)]).then(([r, saved]) => {
       if (!live) return;
       setAccounts(r.accounts);
       setChosen(saved);
@@ -175,15 +175,15 @@ export function InstagramAccount({ dotId, name }: { dotId: string; name: string 
     return () => {
       live = false;
     };
-  }, [dotId]);
+  }, [dotId, toolkit]);
   if (!accounts || (accounts.length < 2 && !chosen)) return null;
   const pick = (value: string) => {
     setChosen(value);
-    start(() => actions.setInstagramAccount(dotId, value));
+    start(() => actions.setAppAccountChoice(dotId, toolkit, value));
   };
   return (
     <div className="surface space-y-3 p-4">
-      <div className="flex flex-col gap-2" role="radiogroup" aria-label="Instagram account">
+      <div className="flex flex-col gap-2" role="radiogroup" aria-label={`${appName} account`}>
         {accounts.map((a) => {
           const value = a.alias ?? a.id;
           const on = chosen === value || chosen === a.id;
@@ -197,13 +197,13 @@ export function InstagramAccount({ dotId, name }: { dotId: string; name: string 
               className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 text-left text-[14px] transition-colors ${on ? "border-foreground/40 bg-black/[0.04] font-medium dark:bg-white/[0.06]" : "border-black/10 text-foreground/70 hover:border-black/25 dark:border-white/10"}`}
             >
               <span className={`size-3.5 shrink-0 rounded-full border ${on ? "border-foreground bg-foreground" : "border-foreground/30"}`} />
-              <span className="min-w-0 flex-1 truncate">{a.label ?? a.alias ?? "Instagram account"}</span>
+              <span className="min-w-0 flex-1 truncate">{a.label ?? a.alias ?? `${appName} account`}</span>
               {a.alias && <span className="shrink-0 font-mono text-[11px] text-foreground/45">{a.alias}</span>}
             </button>
           );
         })}
       </div>
-      <p className="text-caption text-foreground/55">{chosen ? `${name} only posts to and reads this account.` : `Pick one so ${name} knows which account to use.`}</p>
+      <p className="text-caption text-foreground/55">{chosen ? `${name} only uses this ${appName} account.` : `Pick one so ${name} knows which ${appName} account to use.`}</p>
     </div>
   );
 }

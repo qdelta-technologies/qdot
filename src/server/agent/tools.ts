@@ -323,7 +323,7 @@ Account: your connected LinkedIn account`,
       if (!text) return "No post text was given. Ask the user for the exact wording.";
       return runOnce(`linkedin-video|${link.name}|${text}`, async () => {
         try {
-          const r = await postLinkedInVideo(link.url, text, "", link.size);
+          const r = await postLinkedInVideo(link.url, text, "", link.size, repo.appAccount(ctx.dot.id, "linkedin"));
           if (r.ok) return r.link ? `Published on LinkedIn. Link: ${r.link}. Tell the user in one plain sentence.` : `${r.log} Reply in two plain sentences, with no JSON or code.`;
           return `The video was NOT posted. Tell the user in plain words, with no JSON or code: ${r.log}`;
         } catch (err) {
@@ -374,7 +374,7 @@ Account: your connected LinkedIn account`,
       const kind = /reel|video/i.test(s(a.kind)) || /^video\//i.test(link.mime) ? "reel" : "photo";
       return runOnce(`instagram|${link.name}|${s(a.caption).trim()}`, async () => {
         try {
-          const r = await postInstagram(link.url, s(a.caption).trim(), kind, link.mime, link.size, repo.instagramAccount(ctx.dot.id));
+          const r = await postInstagram(link.url, s(a.caption).trim(), kind, link.mime, link.size, repo.appAccount(ctx.dot.id, "instagram"));
           return r.ok ? `${r.message} Tell the user in one plain sentence.` : `NOT posted. Tell the user in plain words, with no JSON or code: ${r.message}`;
         } catch (err) {
           return `NOT posted: ${err instanceof Error ? err.message : String(err)}`;
@@ -809,6 +809,20 @@ TOOLS.push({
   pause: "connect",
 });
 
+/** If a dot always uses one account of an app (set in its Setup page), every action on that app goes through it. The dot can't pick another. */
+function pinAccounts(args: Record<string, unknown>, dotId: string): Record<string, unknown> {
+  const items = composio.executeItems(args);
+  if (!items.length) return args;
+  return {
+    ...args,
+    tools: items.map((i) => {
+      const toolkit = String(i.tool_slug ?? "").split("_")[0].toLowerCase();
+      const pinned = toolkit ? repo.appAccount(dotId, toolkit) : null;
+      return pinned ? { ...i, account: pinned } : i;
+    }),
+  };
+}
+
 /** Composio's hosted MCP tools, wrapped so they pass our rules and approval cards. */
 function composioTools(): ToolDef[] {
   return composio.mcpTools().map((t): ToolDef => {
@@ -817,7 +831,7 @@ function composioTools(): ToolDef[] {
       description: t.description ?? t.name,
       parameters: t.inputSchema as Record<string, unknown>,
       strict: false,
-      execute: (a: Record<string, unknown>) => composio.callTool(t.name, a),
+      execute: (a: Record<string, unknown>, ctx?: ToolCtx) => composio.callTool(t.name, t.name === "COMPOSIO_MULTI_EXECUTE_TOOL" && ctx ? pinAccounts(a, ctx.dot.id) : a),
     };
     if (t.name === "COMPOSIO_MULTI_EXECUTE_TOOL") {
       return {

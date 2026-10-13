@@ -1,6 +1,6 @@
 import "server-only";
 import { executeTool as composioExecute } from "./composio";
-import { instagramAccount } from "./repo";
+import { appAccount } from "./repo";
 import { addLead } from "./leads";
 
 // Leads from people who already reached out on Instagram: commenters on the account's own posts, and people who sent a DM.
@@ -45,7 +45,7 @@ export type CollectResult = { saved: string[]; duplicates: number; skipped: numb
 
 export async function collectInstagramLeads(dotId: string, opts: { posts: number; dms: boolean }): Promise<CollectResult> {
   const result: CollectResult = { saved: [], duplicates: 0, skipped: 0, notes: [] };
-  const executeTool = (slug: string, args: Record<string, unknown>) => composioExecute(slug, args, instagramAccount(dotId));
+  const executeTool = (slug: string, args: Record<string, unknown>) => composioExecute(slug, args, appAccount(dotId, "instagram"));
   const seen = new Set<string>();
 
   let me = { id: "", username: "" };

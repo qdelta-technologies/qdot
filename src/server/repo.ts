@@ -453,13 +453,13 @@ export function setApprovalMode(dotId: string, mode: ApprovalMode) {
   setSetting(`approval:${dotId}`, mode === "ask" ? null : mode);
 }
 
-/** The one Instagram account (Composio alias or account id) this dot posts from and reads. Empty means Composio's default. */
-export function instagramAccount(dotId: string): string | null {
-  return getSetting(`instagram_account:${dotId}`)?.trim() || null;
+/** The one connected account (Composio alias or account id) of an app that this dot always uses, e.g. "instagram" or "linkedin". Empty means Composio's default. */
+export function appAccount(dotId: string, toolkit: string): string | null {
+  return getSetting(`${toolkit.toLowerCase()}_account:${dotId}`)?.trim() || null;
 }
 
-export function setInstagramAccount(dotId: string, account: string | null) {
-  setSetting(`instagram_account:${dotId}`, account?.trim() || null);
+export function setAppAccount(dotId: string, toolkit: string, account: string | null) {
+  setSetting(`${toolkit.toLowerCase()}_account:${dotId}`, account?.trim() || null);
 }
 
 // ---------- rules ----------
