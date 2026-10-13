@@ -561,9 +561,61 @@ function Composer({
     }
   };
 
+  // Phones: record a clip, send it to the server to be turned into text, and paste the text in when it is stopped.
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks: Blob[] = [];
+      const rec = new MediaRecorder(stream);
+      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        recorderRef.current = null;
+        setIsListening(false);
+        const type = rec.mimeType || "audio/webm";
+        const blob = new Blob(chunks, { type });
+        if (!blob.size) return;
+        setTranscribing(true);
+        try {
+          const form = new FormData();
+          form.append("audio", new File([blob], `voice.${type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm"}`, { type }));
+          const res = await fetch("/api/transcribe", { method: "POST", body: form });
+          const data = await res.json();
+          if (!res.ok || data.error) throw new Error(data.error || "Could not turn the voice into text.");
+          const said = String(data.text || "").trim();
+          if (said) setText((t) => (t.trim() ? `${t.trim()} ${said}` : said));
+          else alert("I did not hear anything. Please try again, a little closer to the mic.");
+        } catch (err) {
+          alert(err instanceof Error ? err.message : "Could not turn the voice into text.");
+        } finally {
+          setTranscribing(false);
+        }
+      };
+      recorderRef.current = rec;
+      rec.start();
+      setIsListening(true);
+    } catch {
+      alert("Microphone permission was denied. Please allow microphone access in your browser to dictate.");
+    }
+  };
+
   const toggleListening = () => {
+    if (transcribing) return;
     if (isListening) {
+      if (recorderRef.current) {
+        try { recorderRef.current.stop(); } catch {}
+        return;
+      }
       stopListening();
+      return;
+    }
+
+    // On phones the browser's built-in recognizer often listens but returns no text, so record and transcribe on the server instead.
+    if (typeof MediaRecorder !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+      void startRecording();
       return;
     }
 
@@ -571,19 +623,16 @@ function Composer({
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
+      if (typeof MediaRecorder !== "undefined") {
+        void startRecording();
+        return;
+      }
       alert("Speech recognition is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Safari.");
       return;
     }
 
     userStoppedRef.current = false;
     baseTextRef.current = text;
-
-    // On phones, holding our own mic stream at the same time starves the speech recognizer (it listens but returns no text),
-    // so let the recognizer open the mic alone there. The waveform is only a nicety on desktop.
-    if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
-      startRecognition();
-      return;
-    }
 
     // Get the mic stream first (single shared stream for both recognition + waveform)
     navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
@@ -628,6 +677,12 @@ function Composer({
   };
 
   const submit = () => {
+    if (transcribing) return;
+    if (recorderRef.current) {
+      // Still recording: finish the clip first so its text lands in the box, then the user sends it
+      try { recorderRef.current.stop(); } catch {}
+      return;
+    }
     if (isListening) {
       userStoppedRef.current = true;
       if (recognitionRef.current) {
