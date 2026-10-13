@@ -43,7 +43,15 @@ export default function FolderList({
       localStorage.setItem("qdot:pinned-folders", JSON.stringify(next));
     } catch {}
   };
-  const ordered = [...folders.filter(isPinned), ...folders.filter((f) => !isPinned(f))];
+  // Pinned projects get their own group above "All dots", in the order they were pinned; the rest follow.
+  const pinnedFolders = pinned.flatMap((p) => folders.find((f) => f.toLowerCase() === p.toLowerCase()) ?? []);
+  const otherFolders = folders.filter((f) => !isPinned(f));
+  const manageRow = (f: string) => row(f, f, dots.filter((d) => ownedBy(d, f)), { mine: !!me && f.toLowerCase() === me.toLowerCase(), manage: true });
+  const groupLabel = (text: string) => (
+    <div key={`label-${text}`} className="px-2.5 pt-3 pb-1 text-[12px] font-medium text-foreground/45">
+      {text}
+    </div>
+  );
 
   const add = () => {
     const name = draft.trim();
@@ -117,7 +125,6 @@ export default function FolderList({
             <span className="flex items-center gap-2">
               <span className="truncate text-[15px] font-medium">{label}</span>
               {opts.mine && <span className="rounded-full bg-brand/15 px-1.5 py-px text-[10px] tracking-wide text-brand-readable uppercase">You</span>}
-              {opts.manage && isPinned(key) && <Pin className="size-3 shrink-0 fill-current text-foreground/45 group-hover:hidden" strokeWidth={1.75} aria-label="Pinned" />}
             </span>
             <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-foreground/45">
               <span className="flex -space-x-1.5">
@@ -178,8 +185,11 @@ export default function FolderList({
         )}
       </div>
 
+      {pinnedFolders.length > 0 && groupLabel("Pinned")}
+      {pinnedFolders.map(manageRow)}
+      {pinnedFolders.length > 0 && groupLabel("Projects")}
       {row(ALL_FOLDERS, "All dots", dots, { icon: "open" })}
-      {ordered.map((f) => row(f, f, dots.filter((d) => ownedBy(d, f)), { mine: !!me && f.toLowerCase() === me.toLowerCase(), manage: true }))}
+      {otherFolders.map(manageRow)}
       {loose.length > 0 && row(NONE_FOLDER, "No project", loose)}
     </nav>
   );
