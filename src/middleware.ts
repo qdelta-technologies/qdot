@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { AUTH_COOKIE_NAME, hashPassword, isAuthEnabled } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, isAuthEnabled, verifySessionToken } from "@/lib/auth";
 
 export async function middleware(request: NextRequest) {
   if (!isAuthEnabled()) {
@@ -7,10 +7,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const { pathname } = request.nextUrl;
-  const rawExpected = process.env.ACCESS_PASSWORD?.trim() || "";
-  const expectedToken = await hashPassword(rawExpected);
-  const sessionCookie = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  const isAuthenticated = sessionCookie === expectedToken;
+  const isAuthenticated = await verifySessionToken(request.cookies.get(AUTH_COOKIE_NAME)?.value);
 
   // If visiting /login, auth API, Composio OAuth callback, or PWA assets
   if (

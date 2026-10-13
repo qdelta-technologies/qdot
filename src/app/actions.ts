@@ -23,7 +23,7 @@ import { listAutomationLog, recordAutomation, type AutomationLogEntry } from "@/
 import * as voice from "@/server/voice";
 import { autoTitle } from "@/server/titles";
 import { cookies, headers } from "next/headers";
-import { AUTH_COOKIE_NAME, hashPassword, isAuthEnabled } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, createSessionToken, isAuthEnabled, safeEqual, verifySessionToken } from "@/lib/auth";
 import { checkRateLimit, getClientIp, recordFailedAttempt, resetRateLimit } from "@/lib/rateLimit";
 import { isProtectedDot } from "@/lib/protectedDots";
 import type { Attachment, Dot, Look, RuleDecision, TriggerApp, TriggerType } from "@/lib/types";
@@ -80,7 +80,7 @@ export async function deleteDot(dotId: string, password?: string): Promise<strin
     const clientIp = await getClientIp();
     const limit = checkRateLimit(clientIp);
     if (!limit.allowed) return `Too many failed attempts. Please wait ${limit.waitMinutes || 15} minute(s) before trying again.`;
-    if ((password ?? "").trim() !== expected) {
+    if (!safeEqual((password ?? "").trim(), expected)) {
       const { remaining } = recordFailedAttempt(clientIp);
       return remaining === 0 ? "Too many failed attempts. Locked for 15 minutes." : `Wrong team password. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`;
     }
@@ -641,10 +641,7 @@ export async function checkAuthStatus(): Promise<{ enabled: boolean; authenticat
   if (!enabled) return { enabled: false, authenticated: true };
 
   const cookieStore = await cookies();
-  const session = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  const rawExpected = process.env.ACCESS_PASSWORD?.trim() || "";
-  const expectedToken = await hashPassword(rawExpected);
-  return { enabled: true, authenticated: session === expectedToken };
+  return { enabled: true, authenticated: await verifySessionToken(cookieStore.get(AUTH_COOKIE_NAME)?.value) };
 }
 
 export async function verifyAccessPassword(password: string): Promise<{ success: boolean; error?: string }> {
@@ -662,7 +659,7 @@ export async function verifyAccessPassword(password: string): Promise<{ success:
   }
 
   const expected = process.env.ACCESS_PASSWORD?.trim() || "";
-  if (password.trim() !== expected) {
+  if (!safeEqual(password.trim(), expected)) {
     const { remaining } = recordFailedAttempt(clientIp);
     if (remaining === 0) {
       return {
@@ -679,9 +676,8 @@ export async function verifyAccessPassword(password: string): Promise<{ success:
   // Clear failed attempts counter on success
   resetRateLimit(clientIp);
 
-  const hash = await hashPassword(expected);
   const cookieStore = await cookies();
-  cookieStore.set(AUTH_COOKIE_NAME, hash, {
+  cookieStore.set(AUTH_COOKIE_NAME, await createSessionToken(), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

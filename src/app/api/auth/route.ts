@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { AUTH_COOKIE_NAME, hashPassword, isAuthEnabled } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, createSessionToken, isAuthEnabled, safeEqual, verifySessionToken } from "@/lib/auth";
 import { checkRateLimit, getRequestIp, recordFailedAttempt, resetRateLimit } from "@/lib/rateLimit";
 
 export async function GET() {
@@ -9,13 +9,9 @@ export async function GET() {
   }
 
   const cookieStore = await cookies();
-  const session = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  const rawExpected = process.env.ACCESS_PASSWORD?.trim() || "";
-  const expectedToken = await hashPassword(rawExpected);
-
   return NextResponse.json({
     enabled: true,
-    authenticated: session === expectedToken,
+    authenticated: await verifySessionToken(cookieStore.get(AUTH_COOKIE_NAME)?.value),
   });
 }
 
@@ -41,7 +37,7 @@ export async function POST(req: NextRequest) {
     const password = typeof body.password === "string" ? body.password.trim() : "";
     const expected = process.env.ACCESS_PASSWORD?.trim() || "";
 
-    if (password !== expected) {
+    if (!safeEqual(password, expected)) {
       const { remaining } = recordFailedAttempt(clientIp);
       const errorMsg =
         remaining === 0
@@ -53,9 +49,8 @@ export async function POST(req: NextRequest) {
     // Success: clear failed attempts
     resetRateLimit(clientIp);
 
-    const hash = await hashPassword(expected);
     const cookieStore = await cookies();
-    cookieStore.set(AUTH_COOKIE_NAME, hash, {
+    cookieStore.set(AUTH_COOKIE_NAME, await createSessionToken(), {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
