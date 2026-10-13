@@ -244,7 +244,11 @@ export async function resolveCard(messageId: string, choice: "approve" | "deny" 
     } else {
       const def = findTool(call.name);
       let output: string;
-      if (card.kind === "account") output = accountOutcome(dot, card, answer);
+      if (card.kind === "account" && answer === NEW_ACCOUNT) {
+        const next = await startNewAccount(dot, pending, card);
+        if (next === true) return; // the sign-in card is now waiting; the run resumes when it is answered
+        output = next;
+      } else if (card.kind === "account") output = accountOutcome(dot, card, answer);
       else if (def?.pause === "question") output = `The user answered: ${answer ?? ""}`;
       else if (def?.pause === "approval") output = approved ? "The user approved. Go ahead." : "The user denied this. Do not do it; tell them briefly what you'll do instead, if anything.";
       else if (def?.pause === "connect") output = approved ? "Connected. Continue with the task." : "The user chose not to connect this app right now. Continue without it or tell them what you need.";
@@ -821,15 +825,27 @@ async function processCalls(dot: Dot, pending: Pending, signal: AbortSignal): Pr
 /** The choice on an account card that means "connect a new account". */
 const NEW_ACCOUNT = "__new__";
 
+/** The user chose "add a new account": show the sign-in card for it. Returns true when the card is up, or a message for the dot if it could not be started. */
+async function startNewAccount(dot: Dot, pending: Pending, card: CardData): Promise<true | string> {
+  const toolkit = card.toolkit ?? "";
+  const alias = `${toolkit}-${card.choices?.length ?? 2}`;
+  const started = await composio.startConnect(toolkit, undefined, alias).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }));
+  if ("error" in started) return `Couldn't start adding a new ${composio.prettyName(toolkit)} account: ${started.error}`;
+  if (started.already) return "Already connected.";
+  pauseFor(dot, pending, {
+    kind: "connect", status: "pending", title: `Connect ${started.name}`, toolkit, url: started.url, alias,
+    detail: `Sign in with the ${composio.prettyName(toolkit)} account you want ${dot.name} to use. ${dot.name} never sees your password.`,
+  });
+  const cardId = pending.cardId!;
+  void started.wait().then(() => resolveCard(cardId, "approve")).catch(() => {});
+  return true;
+}
+
 /** What the dot is told after the user answers an account card. Linking happens here. */
 function accountOutcome(dot: Dot, card: CardData, answer?: string): string {
   const toolkit = card.toolkit ?? "";
   const app = composio.prettyName(toolkit);
   if (!answer) return `The user did not pick an account. Don't link anything; continue without ${app}.`;
-  if (answer === NEW_ACCOUNT) {
-    const alias = `${toolkit}-${card.choices?.length ?? 2}`;
-    return `The user wants to add a NEW ${app} account. Call app_connect now with toolkit "${toolkit}" and alias "${alias}". Don't ask anything else first.`;
-  }
   repo.setAppAccount(dot.id, toolkit, answer);
   const picked = card.choices?.find((c) => c.value === answer);
   return `Linked ${picked?.label ?? "the account"} to you for ${app}. Continue the task with it.`;
