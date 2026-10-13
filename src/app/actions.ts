@@ -145,13 +145,20 @@ export async function setApprovalMode(dotId: string, mode: "allow" | "ask" | "ne
 
 export type LinkedApp = { toolkit: string; name: string; logo: string; account: string };
 
+/** "name · alias", so two accounts with the same email can be told apart. */
+function withAlias(a: composio.AppAccount): string {
+  const name = composio.accountName(a);
+  if (!a.alias) return `${name} · no alias`;
+  return a.alias === name ? name : `${name} · ${a.alias}`;
+}
+
 /** The apps linked to a dot, each with the name of the account it uses. */
 export async function getLinkedApps(dotId: string): Promise<LinkedApp[]> {
   const links = repo.linkedApps(dotId);
   return Promise.all(
     links.map(async (l) => {
       const found = await composio.listAppAccounts(l.toolkit).then((r) => r.accounts.find((a) => a.id === l.account || a.alias === l.account)).catch(() => undefined);
-      return { toolkit: l.toolkit, name: composio.prettyName(l.toolkit), logo: `https://logos.composio.dev/api/${l.toolkit}`, account: found ? composio.accountName(found) : "Account no longer connected" };
+      return { toolkit: l.toolkit, name: composio.prettyName(l.toolkit), logo: `https://logos.composio.dev/api/${l.toolkit}`, account: found ? withAlias(found) : "Account no longer connected" };
     }),
   );
 }
