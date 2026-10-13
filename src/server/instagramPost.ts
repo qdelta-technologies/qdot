@@ -16,14 +16,15 @@ const idIn = (out: string) => out.match(/"id"\s*:\s*"?(\d{8,})"?/)?.[1] ?? null;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const brief = (out: string) => out.replace(/\s+/g, " ").slice(0, 300);
 
-export async function postInstagram(url: string, caption: string, kind: "photo" | "reel", mime: string, size: number): Promise<InstagramResult> {
+export async function postInstagram(url: string, caption: string, kind: "photo" | "reel", mime: string, size: number, account?: string | null): Promise<InstagramResult> {
+  const run = (slug: string, args: Record<string, unknown>) => executeTool(slug, args, account);
   if (kind === "photo" && !IMAGE_TYPES.test(mime)) return { ok: false, link: null, message: `Instagram photos must be JPG or PNG, and this file is ${mime || "unknown"}. WebP is not accepted.` };
   if (kind === "reel" && !VIDEO_TYPES.test(mime)) return { ok: false, link: null, message: `Instagram videos must be MP4 or MOV, and this file is ${mime || "unknown"}.` };
   if (kind === "photo" && size > MAX_IMAGE) return { ok: false, link: null, message: `That photo is ${(size / 1048576).toFixed(1)} MB. Instagram's limit is 8 MB.` };
   if (kind === "reel" && size > MAX_VIDEO) return { ok: false, link: null, message: `That video is ${(size / 1048576).toFixed(0)} MB. The limit here is 100 MB.` };
   if (caption.length > 2200) return { ok: false, link: null, message: "The caption is longer than Instagram's 2,200 character limit." };
 
-  const created = await executeTool("INSTAGRAM_CREATE_MEDIA_CONTAINER", {
+  const created = await run("INSTAGRAM_CREATE_MEDIA_CONTAINER", {
     content_type: kind,
     caption,
     ...(kind === "photo" ? { image_url: url } : { video_url: url, share_to_feed: true }),
@@ -38,7 +39,7 @@ export async function postInstagram(url: string, caption: string, kind: "photo" 
   let last = "";
   while (Date.now() < deadline) {
     await sleep(kind === "reel" ? 6000 : 3000);
-    last = await executeTool("INSTAGRAM_GET_POST_STATUS", { creation_id: creationId });
+    last = await run("INSTAGRAM_GET_POST_STATUS", { creation_id: creationId });
     // Composio replies always carry an "error": null field, so only the status value itself decides
     if (/"status_code"\s*:\s*"?(FINISHED|PUBLISHED)/i.test(last) || /\bFinished: Media is ready/i.test(last) || (/\bFINISHED\b/.test(last) && !/"status_code"\s*:\s*"?(ERROR|EXPIRED|IN_PROGRESS)/i.test(last))) {
       ready = true;
@@ -50,18 +51,18 @@ export async function postInstagram(url: string, caption: string, kind: "photo" 
 
   let igUserId = "me";
   try {
-    const me = await executeTool("INSTAGRAM_GET_USER_INFO", {});
+    const me = await run("INSTAGRAM_GET_USER_INFO", {});
     igUserId = idIn(me) ?? "me";
   } catch {
     // "me" is accepted by the publish tool
   }
-  const published = await executeTool("INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH", { ig_user_id: igUserId, creation_id: creationId });
+  const published = await run("INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH", { ig_user_id: igUserId, creation_id: creationId });
   const mediaId = failed(published) ? null : idIn(published);
   if (!mediaId) return { ok: false, link: null, message: `Instagram did not confirm the post, so assume it was NOT published. Details: ${brief(published)}` };
 
   let link: string | null = null;
   try {
-    const info = await executeTool("INSTAGRAM_GET_IG_MEDIA", { ig_media_id: mediaId, fields: "permalink" });
+    const info = await run("INSTAGRAM_GET_IG_MEDIA", { ig_media_id: mediaId, fields: "permalink" });
     link = info.match(/https:\/\/www\.instagram\.com\/[^"\s\\]+/)?.[0] ?? null;
   } catch {
     // the link is a nice-to-have

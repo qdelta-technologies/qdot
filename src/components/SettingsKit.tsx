@@ -159,3 +159,51 @@ export function ApprovalMode({ dotId, name }: { dotId: string; name: string }) {
     </div>
   );
 }
+
+/** Which connected Instagram account a dot posts from and reads. Shown when more than one is connected. */
+export function InstagramAccount({ dotId, name }: { dotId: string; name: string }) {
+  const [accounts, setAccounts] = useState<{ id: string; alias: string | null; label: string | null }[] | null>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [, start] = useTransition();
+  useEffect(() => {
+    let live = true;
+    void Promise.all([actions.getAppAccounts("instagram"), actions.getInstagramAccount(dotId)]).then(([r, saved]) => {
+      if (!live) return;
+      setAccounts(r.accounts);
+      setChosen(saved);
+    });
+    return () => {
+      live = false;
+    };
+  }, [dotId]);
+  if (!accounts || (accounts.length < 2 && !chosen)) return null;
+  const pick = (value: string) => {
+    setChosen(value);
+    start(() => actions.setInstagramAccount(dotId, value));
+  };
+  return (
+    <div className="surface space-y-3 p-4">
+      <div className="flex flex-col gap-2" role="radiogroup" aria-label="Instagram account">
+        {accounts.map((a) => {
+          const value = a.alias ?? a.id;
+          const on = chosen === value || chosen === a.id;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => pick(value)}
+              className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 text-left text-[14px] transition-colors ${on ? "border-foreground/40 bg-black/[0.04] font-medium dark:bg-white/[0.06]" : "border-black/10 text-foreground/70 hover:border-black/25 dark:border-white/10"}`}
+            >
+              <span className={`size-3.5 shrink-0 rounded-full border ${on ? "border-foreground bg-foreground" : "border-foreground/30"}`} />
+              <span className="min-w-0 flex-1 truncate">{a.label ?? a.alias ?? "Instagram account"}</span>
+              {a.alias && <span className="shrink-0 font-mono text-[11px] text-foreground/45">{a.alias}</span>}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-caption text-foreground/55">{chosen ? `${name} only posts to and reads this account.` : `Pick one so ${name} knows which account to use.`}</p>
+    </div>
+  );
+}

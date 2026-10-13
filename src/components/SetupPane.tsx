@@ -8,7 +8,7 @@ import { useStore } from "@/lib/store";
 import LookEditor from "./LookEditor";
 import { DotTriggers } from "./Triggers";
 import Dot3DLazy from "./Dot3DLazy";
-import { ApprovalMode, EditButton, Empty, PageHeader, RemoveButton, Section } from "./SettingsKit";
+import { ApprovalMode, EditButton, InstagramAccount, Empty, PageHeader, RemoveButton, Section } from "./SettingsKit";
 import ModelPicker from "./ModelPicker";
 import OwnerField from "./OwnerField";
 import type { Dot } from "@/lib/types";
@@ -108,6 +108,10 @@ export default function SetupPane({ dot }: { dot: Dot }) {
 
         <Section eyebrow="Approvals" title="Approvals" description={`Choose how much ${dot.name} can do without checking with you.`}>
           <ApprovalMode dotId={dot.id} name={dot.name} />
+        </Section>
+
+        <Section eyebrow="Instagram" title="Account" description={`Which connected Instagram account ${dot.name} uses.`}>
+          <InstagramAccount dotId={dot.id} name={dot.name} />
         </Section>
 
         <Section eyebrow="Automation" title="Routines" description={`Recurring tasks ${dot.name} runs on a schedule. You can also just ask it in chat.`}>

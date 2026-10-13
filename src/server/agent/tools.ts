@@ -374,7 +374,7 @@ Account: your connected LinkedIn account`,
       const kind = /reel|video/i.test(s(a.kind)) || /^video\//i.test(link.mime) ? "reel" : "photo";
       return runOnce(`instagram|${link.name}|${s(a.caption).trim()}`, async () => {
         try {
-          const r = await postInstagram(link.url, s(a.caption).trim(), kind, link.mime, link.size);
+          const r = await postInstagram(link.url, s(a.caption).trim(), kind, link.mime, link.size, repo.instagramAccount(ctx.dot.id));
           return r.ok ? `${r.message} Tell the user in one plain sentence.` : `NOT posted. Tell the user in plain words, with no JSON or code: ${r.message}`;
         } catch (err) {
           return `NOT posted: ${err instanceof Error ? err.message : String(err)}`;

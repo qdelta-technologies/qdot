@@ -453,6 +453,15 @@ export function setApprovalMode(dotId: string, mode: ApprovalMode) {
   setSetting(`approval:${dotId}`, mode === "ask" ? null : mode);
 }
 
+/** The one Instagram account (Composio alias or account id) this dot posts from and reads. Empty means Composio's default. */
+export function instagramAccount(dotId: string): string | null {
+  return getSetting(`instagram_account:${dotId}`)?.trim() || null;
+}
+
+export function setInstagramAccount(dotId: string, account: string | null) {
+  setSetting(`instagram_account:${dotId}`, account?.trim() || null);
+}
+
 // ---------- rules ----------
 
 const toRule = (r: Row): Rule => ({

@@ -296,7 +296,7 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
 let metaSession: string | null = null;
 
 /** Run one Composio app tool (for example GOOGLEDRIVE_GET_ABOUT) through the meta tools this connection exposes. */
-export async function executeTool(slug: string, args: Record<string, unknown>): Promise<string> {
+export async function executeTool(slug: string, args: Record<string, unknown>, account?: string | null): Promise<string> {
   const run = async () => {
     if (!metaSession) {
       const found = await callTool("COMPOSIO_SEARCH_TOOLS", { queries: [{ use_case: `run ${slug}` }], session: { generate_id: true } });
@@ -310,7 +310,8 @@ export async function executeTool(slug: string, args: Record<string, unknown>): 
       }
     }
     return callTool("COMPOSIO_MULTI_EXECUTE_TOOL", {
-      tools: [{ tool_slug: slug, arguments: args }],
+      // With several accounts of one app connected, `account` (an alias or account id) says which one to use.
+      tools: [{ tool_slug: slug, arguments: args, ...(account ? { account } : {}) }],
       sync_response_to_workbench: false,
       thought: `QDot is running ${slug}`,
       session_id: metaSession,

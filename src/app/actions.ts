@@ -143,6 +143,14 @@ export async function setApprovalMode(dotId: string, mode: "allow" | "ask" | "ne
   if (mode === "allow" || mode === "ask" || mode === "never") repo.setApprovalMode(dotId, mode);
 }
 
+export async function getInstagramAccount(dotId: string): Promise<string | null> {
+  return repo.instagramAccount(dotId);
+}
+
+export async function setInstagramAccount(dotId: string, account: string | null): Promise<void> {
+  repo.setInstagramAccount(dotId, account);
+}
+
 export async function addRule(dotId: string | null, action: string, decision: RuleDecision) {
   if (action.trim()) repo.addRule({ dotId, action: action.trim(), decision });
 }
