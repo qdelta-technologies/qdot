@@ -11,7 +11,7 @@ import * as leads from "../leads";
 import { recordAutomation } from "../automationLog";
 import { localTimeToMs, userTimeZone } from "../timezone";
 import { postVideo as postLinkedInVideo } from "../linkedinVideo";
-import { postInstagram } from "../instagramPost";
+import { postInstagram, postInstagramCarousel } from "../instagramPost";
 import { collectInstagramLeads } from "../instagramLeads";
 import { createFileToken, createStoredFileToken, isSafeWorkspacePath } from "../links";
 import type { Dot, RuleDecision } from "@/lib/types";
@@ -49,6 +49,8 @@ const obj = (properties: Record<string, unknown>, required = Object.keys(propert
 const str = (description: string) => ({ type: "string", description });
 const nullableStr = (description: string) => ({ type: ["string", "null"], description });
 const s = (v: unknown) => String(v ?? "");
+/** The extra photos of an Instagram carousel (everything after the first), trimmed and without blanks. */
+const morePaths = (a: Record<string, unknown>): string[] => (Array.isArray(a.more_paths) ? a.more_paths.map((x) => s(x).trim()).filter(Boolean) : []);
 
 // Delegation is injected by the runtime to avoid a circular import.
 let consultImpl: ((target: Dot, message: string, from: Dot, depth: number, signal: AbortSignal) => Promise<string>) | null = null;
@@ -360,23 +362,44 @@ Account: your connected LinkedIn account`,
     precheck: async (_a, ctx) => (repo.appAccount(ctx.dot.id, "instagram") ? null : notLinked("instagram")),
     timeoutMs: 6 * 60_000,
     description:
-      "Publish a photo or a Reel (video) to the user's connected Instagram account. Give the file's path (uploads/<name>), the exact caption the user wants, and kind: photo or reel. Needs an Instagram Business or Creator account. The user must approve it first.",
+      "Publish to the user's connected Instagram account: one photo, one Reel (video), or a CAROUSEL of 2 to 10 photos in one post. Give the first file's path (uploads/<name>) and the exact caption. For a carousel also give more_paths: the paths of the other photos, in the order they should appear after the first. Needs an Instagram Business or Creator account. The user must approve it first.",
     parameters: obj({
-      path: str("Path of the photo or video in your workspace, for example uploads/photo.jpg"),
+      path: str("Path of the photo or video in your workspace (the FIRST photo for a carousel), for example uploads/photo.jpg"),
       caption: str("The exact caption, word for word as the user gave it"),
-      kind: str("photo or reel"),
+      kind: str("photo, reel or carousel"),
+      more_paths: { type: ["array", "null"], items: { type: "string" }, description: "Carousel only: the paths of the other photos, in order. Null for a single photo or a Reel." },
     }),
-    describe: (a) => `post "${s(a.path)}" to Instagram`,
-    detail: (a) => `Caption: ${s(a.caption)}\nMedia: ${s(a.kind) || "photo"} ${s(a.path)}\nAccount: your connected Instagram account`,
+    describe: (a) => (morePaths(a).length ? `post a carousel of ${morePaths(a).length + 1} photos to Instagram` : `post "${s(a.path)}" to Instagram`),
+    detail: (a) =>
+      morePaths(a).length
+        ? `Caption: ${s(a.caption)}\nMedia: carousel of ${morePaths(a).length + 1} photos, in this order: ${[s(a.path), ...morePaths(a)].join(", ")}\nAccount: your connected Instagram account`
+        : `Caption: ${s(a.caption)}\nMedia: ${s(a.kind) || "photo"} ${s(a.path)}\nAccount: your connected Instagram account`,
     defaultDecision: () => "ask",
     execute: async (a, ctx) => {
+      const account = repo.appAccount(ctx.dot.id, "instagram");
+      const extra = morePaths(a);
+      const done = (r: { ok: boolean; message: string }) => (r.ok ? `${r.message} Tell the user in one plain sentence.` : `NOT posted. Tell the user in plain words, with no JSON or code: ${r.message}`);
+      if (extra.length) {
+        const links: { url: string; name: string; size: number; mime: string }[] = [];
+        for (const p of [s(a.path), ...extra]) {
+          const l = await fileLink(ctx.dot.id, p, 30);
+          if ("error" in l) return l.error;
+          links.push(l);
+        }
+        return runOnce(`instagram|carousel|${links.map((l) => l.name).join(",")}|${s(a.caption).trim()}`, async () => {
+          try {
+            return done(await postInstagramCarousel(links, s(a.caption).trim(), account));
+          } catch (err) {
+            return `NOT posted: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        });
+      }
       const link = await fileLink(ctx.dot.id, s(a.path), 30);
       if ("error" in link) return link.error;
       const kind = /reel|video/i.test(s(a.kind)) || /^video\//i.test(link.mime) ? "reel" : "photo";
       return runOnce(`instagram|${link.name}|${s(a.caption).trim()}`, async () => {
         try {
-          const r = await postInstagram(link.url, s(a.caption).trim(), kind, link.mime, link.size, repo.appAccount(ctx.dot.id, "instagram"));
-          return r.ok ? `${r.message} Tell the user in one plain sentence.` : `NOT posted. Tell the user in plain words, with no JSON or code: ${r.message}`;
+          return done(await postInstagram(link.url, s(a.caption).trim(), kind, link.mime, link.size, account));
         } catch (err) {
           return `NOT posted: ${err instanceof Error ? err.message : String(err)}`;
         }
@@ -860,8 +883,8 @@ function composioTools(): ToolDef[] {
             const slug = String(i.tool_slug ?? "");
             const linkedTo = composio.toolkitOfSlug(slug);
             if (linkedTo && !repo.appAccount(ctx.dot.id, linkedTo)) return notLinked(linkedTo);
-            if (/^INSTAGRAM_(CREATE_MEDIA_CONTAINER|POST_IG_USER_MEDIA|POST_IG_USER_MEDIA_PUBLISH|CREATE_POST)/i.test(slug))
-              return "Do not post to Instagram with these generic tools. Use the instagram_post tool (path, caption, kind). It checks the file and asks the user first.";
+            if (/^INSTAGRAM_(CREATE_MEDIA_CONTAINER|CREATE_CAROUSEL_CONTAINER|POST_IG_USER_MEDIA|POST_IG_USER_MEDIA_PUBLISH|CREATE_POST)/i.test(slug))
+              return "Do not post to Instagram with these generic tools. Use the instagram_post tool (path, caption, kind, and more_paths for a carousel). It checks the files and asks the user first.";
             if (/^GMAIL_(SEND|CREATE_EMAIL_DRAFT)/i.test(slug)) {
               const args = (i.arguments && typeof i.arguments === "object" ? i.arguments : {}) as Record<string, unknown>;
               const to = String(args.recipient_email ?? args.to ?? "").trim();
