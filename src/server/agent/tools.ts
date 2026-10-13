@@ -880,8 +880,14 @@ function composioTools(): ToolDef[] {
     if (t.name === "COMPOSIO_MANAGE_CONNECTIONS") {
       return {
         ...base,
-        description: "List or check existing app connections. To connect a new app or service (Twitter, Google, GitHub, Slack, etc.), always call app_connect with the toolkit slug instead.",
+        description: "List the accounts in the user's Composio library. That is NOT what is linked to you: it is shared by every dot. To connect or link an app (Twitter, Google, GitHub, Slack, Instagram, etc.), always call app_connect with the toolkit slug instead.",
         label: "Checking app connections",
+        execute: async (a: Record<string, unknown>, ctx?: ToolCtx) => {
+          const out = await composio.callTool(t.name, a);
+          if (!ctx || !composio.toolkitList(a).every((k) => k.action === "list")) return out;
+          const mine = repo.linkedApps(ctx.dot.id).map((l) => l.toolkit);
+          return `${out}\n\nNOTE: the list above is the user's whole library of connected accounts, shared by every dot. It does NOT show what is linked to you. You are linked only to: ${mine.length ? mine.join(", ") : "no apps yet"}. When the user asks what is connected to you, answer with that, not with this list.`;
+        },
         // New connections go through app_connect so the user gets a proper Connect card.
         precheck: async (a) =>
           composio.toolkitList(a).some((k) => (k.action ?? "add") === "add")
