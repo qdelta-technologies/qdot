@@ -1,15 +1,17 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- the Web Speech API has no TypeScript types */
+
 import Link from "next/link";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUp, ArrowUpRight, Folder, Plus } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Folder, Mic, Plus, Square } from "lucide-react";
 import { resolveCard, startConversation } from "@/app/actions";
 import { markRead, useStore } from "@/lib/store";
 import { DEFAULT_LOOK } from "@/lib/look";
 import { statusDot, statusLabel, timeAgo } from "@/lib/status";
 import { groupByOwner } from "@/lib/dots";
-import { useMe } from "@/lib/me";
+import { setHomeDot, useHomeDot, useMe } from "@/lib/me";
 import Dot3DLazy from "./Dot3DLazy";
 import DotOrb from "./DotOrb";
 
@@ -22,12 +24,67 @@ export default function Home() {
   // My dots first, then each teammate's, then unassigned; A to Z inside each group.
   const groups = useMemo(() => groupByOwner(dots, me), [dots, me]);
   const sortedDots = useMemo(() => groups.flatMap((g) => g.dots), [groups]);
-  const [picked, setPicked] = useState<string | null>(null);
+  const picked = useHomeDot();
+  const setPicked = setHomeDot;
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
   const [confirmAll, setConfirmAll] = useState(false);
   // Set the moment a task is sent: holding Enter fires many key events before React re-renders, so state alone can't stop the repeats.
   const sending = useRef(false);
+
+  // Dictation with the browser's own speech recognition, same as the chat box.
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<any>(null);
+  const baseRef = useRef("");
+  const stoppedRef = useRef(true);
+  useEffect(() => () => { try { recRef.current?.abort(); } catch {} }, []);
+  const dictate = () => {
+    if (listening) {
+      stoppedRef.current = true;
+      try { recRef.current?.stop(); } catch {}
+      setListening(false);
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert("Speech recognition is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Safari.");
+      return;
+    }
+    stoppedRef.current = false;
+    baseRef.current = text;
+    const begin = () => {
+      const rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = navigator.language || "en-US";
+      rec.onstart = () => setListening(true);
+      rec.onresult = (event: any) => {
+        let said = "";
+        for (let i = 0; i < event.results.length; ++i) said += event.results[i][0].transcript;
+        said = said.trim();
+        if (said) setText((baseRef.current.trim() ? baseRef.current.trim() + " " : "") + said);
+      };
+      rec.onerror = (event: any) => {
+        if (["not-allowed", "service-not-allowed", "audio-capture", "network"].includes(event.error)) {
+          alert(event.error === "network" ? "Voice typing needs an internet connection. Please try again." : "Could not use the microphone. Please allow microphone access in your browser.");
+          stoppedRef.current = true;
+          setListening(false);
+        }
+      };
+      rec.onend = () => {
+        if (stoppedRef.current) return setListening(false);
+        // The browser stops after a pause: keep what was said and carry on listening
+        setTimeout(() => {
+          if (stoppedRef.current) return;
+          setText((t) => ((baseRef.current = t), t));
+          begin();
+        }, 200);
+      };
+      recRef.current = rec;
+      try { rec.start(); } catch { setListening(false); }
+    };
+    begin();
+  };
 
   const latest = useMemo(
     () => messages.filter((m) => !m.channelId && ((m.role === "dot" && m.text) || (m.role === "card" && m.card?.status === "pending"))).slice(-60).reverse(),
@@ -54,7 +111,8 @@ export default function Home() {
     );
   }
 
-  const target = dots.find((d) => d.id === picked) ?? dots[0];
+  // The dot you used last; otherwise the first of yours (or A to Z when no project is yours yet).
+  const target = dots.find((d) => d.id === picked) ?? sortedDots[0] ?? dots[0];
   const waitingCards = latest.filter((m) => m.role === "card" && m.card?.status === "pending");
 
   const submit = () => {
@@ -116,6 +174,15 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
+                <button
+                  type="button"
+                  onClick={dictate}
+                  aria-label={listening ? "Stop dictating" : "Dictate"}
+                  title={listening ? "Stop" : "Speak instead of typing"}
+                  className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors ${listening ? "bg-destructive/15 text-destructive" : "text-foreground/55 hover:bg-black/[0.05] hover:text-foreground"}`}
+                >
+                  {listening ? <Square className="size-3.5 fill-current" strokeWidth={2} /> : <Mic className="size-[18px]" strokeWidth={1.75} />}
+                </button>
                 <button
                   className="flex size-10 shrink-0 items-center justify-center rounded-full bg-foreground text-card transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-25"
                   disabled={pending || !text.trim()}

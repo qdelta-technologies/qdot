@@ -55,10 +55,15 @@ function localString(key: string) {
 
 const me = localString("qdot-me");
 const ownerFilter = localString("qdot-sidebar-owner");
+const homeDot = localString("qdot-home-dot");
 
 /** The name this browser's user gave for themselves ("" until they say). */
 export const useMe = me.use;
 export const setMe = me.set;
+
+/** The dot the Home task box was last pointed at in this browser (a dot id, "" until chosen). */
+export const useHomeDot = homeDot.use;
+export const setHomeDot = homeDot.set;
 
 /** Sidebar filter: "" = default (Mine when I have a name, else everyone), "all", or an owner's name. */
 export const useOwnerFilter = ownerFilter.use;
