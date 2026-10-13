@@ -136,8 +136,33 @@ export default function Sidebar() {
   }, [drawerOpen]);
 
   const dotById = useMemo(() => new Map(dots.map((d) => [d.id, d])), [dots]);
-  // The dot row reads A to Z, not in the order the dots were created.
-  const sortedDots = useMemo(() => [...dots].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })), [dots]);
+  // The dot row reads A to Z by default. Drag a dot to put it where you want; that order is kept in this browser and dots you haven't placed follow A to Z.
+  const [dotOrder, setDotOrder] = useState<string[]>([]);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("qdot-dot-order") ?? "[]");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- read once after mount so server and client markup match
+      if (Array.isArray(v)) setDotOrder(v.filter((x): x is string => typeof x === "string"));
+    } catch {}
+  }, []);
+  const sortedDots = useMemo(() => {
+    const rank = (d: Dot) => {
+      const i = dotOrder.indexOf(d.id);
+      return i === -1 ? Infinity : i;
+    };
+    return [...dots].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }, [dots, dotOrder]);
+  const moveDot = (from: string, to: string) => {
+    if (from === to) return;
+    const ids = sortedDots.map((d) => d.id).filter((id) => id !== from);
+    ids.splice(Math.max(ids.indexOf(to), 0), 0, from);
+    setDotOrder(ids);
+    try {
+      localStorage.setItem("qdot-dot-order", JSON.stringify(ids));
+    } catch {}
+  };
 
   // Folders: names saved on the server plus any a dot uses. Top level is the folder list; opening one narrows the dots row and chats to it.
   const folders = useMemo(() => foldersOf(dots, storedFolders, me), [dots, storedFolders, me]);
@@ -310,7 +335,7 @@ export default function Sidebar() {
           <input
             autoFocus
             className="field h-9 bg-popover pr-8 pl-8"
-            placeholder="Search chats and dots"
+            placeholder="Search chats, dots and projects"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Escape" && closeSearch()}
@@ -353,8 +378,14 @@ export default function Sidebar() {
                 key={d.id}
                 href={`/dots/${d.id}`}
                 onClick={() => markRead(d.id)}
-                className={`flex w-[54px] shrink-0 flex-col items-center gap-1 rounded-lg py-1.5 transition-colors ${activeDot === d.id ? "bg-black/[0.05]" : "hover:bg-black/[0.03]"}`}
-                title={`${d.name}${d.purpose ? ` · ${d.purpose}` : ""}`}
+                draggable={shownDots.length > 1}
+                onDragStart={(e) => (setDragId(d.id), (e.dataTransfer.effectAllowed = "move"), e.dataTransfer.setData("text/plain", d.id))}
+                onDragOver={(e) => dragId && dragId !== d.id && (e.preventDefault(), setOverId(d.id))}
+                onDragLeave={() => setOverId((o) => (o === d.id ? null : o))}
+                onDrop={(e) => (e.preventDefault(), dragId && moveDot(dragId, d.id), setDragId(null), setOverId(null))}
+                onDragEnd={() => (setDragId(null), setOverId(null))}
+                className={`flex w-[54px] shrink-0 flex-col items-center gap-1 rounded-lg py-1.5 transition-colors ${activeDot === d.id ? "bg-black/[0.05]" : "hover:bg-black/[0.03]"} ${dragId === d.id ? "opacity-40" : ""} ${overId === d.id ? "ring-2 ring-foreground/25" : ""}`}
+                title={`${d.name}${d.purpose ? ` · ${d.purpose}` : ""}${shownDots.length > 1 ? " · drag to reorder" : ""}`}
               >
                 <span className="relative">
                   <DotOrb look={d.look} status={d.status} size={40} still />
@@ -389,6 +420,28 @@ export default function Sidebar() {
           ))}
         </div>
       )}
+
+      {/* Projects matching the search */}
+      {q && (() => {
+        const hits = folders.filter((f) => f.toLowerCase().includes(q.trim().toLowerCase()));
+        return hits.length > 0 ? (
+          <div className="shrink-0 pb-1">
+            <div className="eyebrow px-4 pt-2 pb-1.5">Projects matching “{q}”</div>
+            {hits.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => (setOwnerFilter(f), closeSearch())}
+                className="mx-2 flex w-[calc(100%-1rem)] cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+              >
+                <Folder className="size-4 shrink-0 text-foreground/50" strokeWidth={1.5} />
+                <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{f}</span>
+                <span className="text-[12px] text-foreground/45">{dots.filter((d) => ownedBy(d, f)).length} dots</span>
+              </button>
+            ))}
+          </div>
+        ) : null;
+      })()}
 
       {/* Recent chats */}
       {q && <div className="eyebrow shrink-0 px-4 pt-2 pb-1.5">Chats matching “{q}”</div>}

@@ -230,7 +230,7 @@ export default function Chat({ dot, conversation }: { dot: Dot; conversation?: s
   };
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+    <div className="relative flex min-h-0 flex-1 flex-col bg-card">
       {convId && (
         <Suspense fallback={null}>
           <HistoryLoader convId={convId} />

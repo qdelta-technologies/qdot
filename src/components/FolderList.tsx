@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Check, Folder, FolderOpen, FolderPlus, Pencil, Trash2, X } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { Check, Folder, FolderOpen, FolderPlus, Pencil, Pin, PinOff, Trash2, X } from "lucide-react";
 import { createFolder, deleteFolder, renameFolder } from "@/app/actions";
 import { ALL_FOLDERS, NONE_FOLDER, ownedBy } from "@/lib/dots";
 import type { Dot } from "@/lib/types";
@@ -26,6 +26,24 @@ export default function FolderList({
   const [removing, setRemoving] = useState<string | null>(null);
   const [, start] = useTransition();
   const loose = dots.filter((d) => !d.owner.trim());
+  // Pinned projects float to the top. Kept in this browser only, like other per-person view settings.
+  const [pinned, setPinned] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("qdot:pinned-folders") ?? "[]");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- read once after mount so server and client markup match
+      if (Array.isArray(v)) setPinned(v.filter((x): x is string => typeof x === "string"));
+    } catch {}
+  }, []);
+  const isPinned = (f: string) => pinned.some((p) => p.toLowerCase() === f.toLowerCase());
+  const togglePin = (f: string) => {
+    const next = isPinned(f) ? pinned.filter((p) => p.toLowerCase() !== f.toLowerCase()) : [...pinned, f];
+    setPinned(next);
+    try {
+      localStorage.setItem("qdot:pinned-folders", JSON.stringify(next));
+    } catch {}
+  };
+  const ordered = [...folders.filter(isPinned), ...folders.filter((f) => !isPinned(f))];
 
   const add = () => {
     const name = draft.trim();
@@ -99,6 +117,7 @@ export default function FolderList({
             <span className="flex items-center gap-2">
               <span className="truncate text-[15px] font-medium">{label}</span>
               {opts.mine && <span className="rounded-full bg-brand/15 px-1.5 py-px text-[10px] tracking-wide text-brand-readable uppercase">You</span>}
+              {opts.manage && isPinned(key) && <Pin className="size-3 shrink-0 fill-current text-foreground/45 group-hover:hidden" strokeWidth={1.75} aria-label="Pinned" />}
             </span>
             <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-foreground/45">
               <span className="flex -space-x-1.5">
@@ -114,6 +133,9 @@ export default function FolderList({
         </button>
         {opts.manage && (
           <span className="absolute top-1/2 right-1.5 hidden -translate-y-1/2 items-center group-hover:flex [@media(hover:none)]:flex">
+            <button className="btn-quiet size-7 cursor-pointer p-0 text-foreground/45 [@media(hover:none)]:size-9" aria-label={`${isPinned(key) ? "Unpin" : "Pin"} ${label}`} title={isPinned(key) ? "Unpin project" : "Pin project to the top"} onClick={() => togglePin(key)}>
+              {isPinned(key) ? <PinOff className="size-3.5" strokeWidth={1.75} /> : <Pin className="size-3.5" strokeWidth={1.75} />}
+            </button>
             <button className="btn-quiet size-7 cursor-pointer p-0 text-foreground/45 [@media(hover:none)]:size-9" aria-label={`Rename ${label}`} title="Rename project" onClick={() => (setRename(key), setEditing(key))}>
               <Pencil className="size-3.5" strokeWidth={1.75} />
             </button>
@@ -147,15 +169,17 @@ export default function FolderList({
             </button>
           </form>
         ) : (
-          <button type="button" onClick={() => setAdding(true)} className="flex w-full cursor-pointer items-center gap-2 rounded-xl border border-dashed border-black/15 px-3 py-2 text-[14px] text-foreground/60 transition-colors hover:border-black/30 hover:text-foreground dark:border-white/15 dark:hover:border-white/30">
-            <FolderPlus className="size-4" strokeWidth={1.75} />
+          <button type="button" onClick={() => setAdding(true)} className="group/new flex w-full cursor-pointer items-center gap-2.5 rounded-xl border border-black/[0.08] bg-card px-2.5 py-2 text-[14px] font-medium text-foreground/80 shadow-xs transition-all hover:border-black/20 hover:text-foreground hover:shadow-sm active:scale-[0.99] dark:border-white/[0.08] dark:hover:border-white/20">
+            <span className="flex size-7 items-center justify-center rounded-lg bg-black/[0.05] text-foreground/65 transition-colors group-hover/new:bg-foreground group-hover/new:text-card dark:bg-white/[0.08]">
+              <FolderPlus className="size-4" strokeWidth={1.75} />
+            </span>
             New project
           </button>
         )}
       </div>
 
       {row(ALL_FOLDERS, "All dots", dots, { icon: "open" })}
-      {folders.map((f) => row(f, f, dots.filter((d) => ownedBy(d, f)), { mine: !!me && f.toLowerCase() === me.toLowerCase(), manage: true }))}
+      {ordered.map((f) => row(f, f, dots.filter((d) => ownedBy(d, f)), { mine: !!me && f.toLowerCase() === me.toLowerCase(), manage: true }))}
       {loose.length > 0 && row(NONE_FOLDER, "No project", loose)}
     </nav>
   );
