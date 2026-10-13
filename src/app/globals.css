@@ -580,6 +580,18 @@ html[data-nobar] .qdot-bar-ph { display: none !important; }
 }
 
 
+/* Chat cards (approval, question, connect, account) ease in when they appear. */
+.qdot-card-in {
+  animation: qdot-card-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes qdot-card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qdot-card-in { animation: none; }
+}
+
 /* Sidebar folders: panes slide in as you open a folder or go back, and the folder rows fade in one after another. */
 @keyframes qdot-pane-right {
   from { opacity: 0; transform: translateX(22px); }

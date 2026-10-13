@@ -1251,75 +1251,153 @@ function sanitizeAssistantText(text: string): string {
   );
 });
 
+type CardKind = NonNullable<Message["card"]>["kind"];
+
+const CARD_META: Record<CardKind, { label: string; Icon: typeof Plug; tone: string }> = {
+  approval: { label: "Approval needed", Icon: ShieldAlert, tone: "bg-warning/15 text-warning" },
+  question: { label: "Question for you", Icon: MessageSquare, tone: "bg-brand/15 text-brand-readable" },
+  connect: { label: "Connect an app", Icon: Plug, tone: "bg-brand/15 text-brand-readable" },
+  account: { label: "Choose an account", Icon: KeyRound, tone: "bg-brand/15 text-brand-readable" },
+};
+
+/** Visible keyboard focus for the card's custom buttons. */
+const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60";
+
+/** One plain sentence for what happened to a card that has been answered. */
+function cardResult(card: NonNullable<Message["card"]>): string {
+  if (card.status === "expired") return "Expired";
+  if (card.status === "denied") return card.kind === "approval" ? "Denied" : "Skipped";
+  if (card.kind === "connect") return "Connected";
+  if (card.kind === "account") return card.answer?.startsWith("Add a new") ? "Adding a new account" : "Using " + (card.answer ?? "the account");
+  if (card.status === "answered") return "You answered: " + (card.answer ?? "");
+  return "Approved";
+}
+
 function CardRow({ m }: { m: Message }) {
   const card = m.card!;
   const [answer, setAnswer] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const open = card.status === "pending";
-  const act = (choice: "approve" | "deny" | "always" | "answer", value?: string) => start(() => resolveCard(m.id, choice, value));
+  const act = (choice: "approve" | "deny" | "always" | "answer", value?: string) => {
+    setBusy(choice === "answer" ? "answer:" + value : choice);
+    start(() => resolveCard(m.id, choice, value));
+  };
 
   if (!open) {
-    const tone = card.status === "approved" || card.status === "answered" ? "text-success" : card.status === "denied" ? "text-destructive" : "text-foreground/40";
+    const good = card.status === "approved" || card.status === "answered";
     const Icon = card.status === "denied" ? X : card.status === "expired" ? Clock : Check;
+    const tone = good ? "bg-success/15 text-success" : card.status === "denied" ? "bg-destructive/10 text-destructive" : "bg-black/[0.06] text-foreground/45 dark:bg-white/[0.08]";
     return (
-      <div className="flex max-w-[560px] items-center gap-2.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-card/60 px-3.5 py-2.5">
-        <Icon className={`size-3.5 shrink-0 ${tone}`} strokeWidth={2} />
-        <span className="truncate text-body-sm text-foreground/65 font-medium">{card.title}</span>
-        <span className={`ml-auto shrink-0 font-mono text-[11px] tracking-wider uppercase ${tone}`}>
-          {card.status === "answered" ? `Answered · ${card.answer}` : card.kind === "connect" && card.status === "approved" ? "Connected" : card.status}
+      <div className="flex max-w-[580px] items-start gap-3 rounded-xl border border-black/[0.06] bg-card/60 px-3.5 py-2.5 dark:border-white/[0.08]">
+        <span className={"mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full " + tone}>
+          <Icon className="size-3" strokeWidth={2.25} aria-hidden="true" />
         </span>
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-2 text-body-sm font-medium text-foreground/70">{card.title}</div>
+          <div className="text-caption text-foreground/50">{cardResult(card)}</div>
+        </div>
       </div>
     );
   }
 
+  const meta = CARD_META[card.kind];
+  const titleId = "card-" + m.id;
+  const Spin = <Loader2 className="size-4 animate-spin" aria-hidden="true" />;
+
   return (
-    <div className="surface max-w-[580px] overflow-hidden rounded-2xl shadow-elevated">
-      <div className="flex items-center gap-2 border-b border-black/[0.06] dark:border-white/[0.08] bg-popover px-4 py-2.5">
-        <span className="size-2 rounded-full bg-warning" />
-        <span className="eyebrow">{card.kind === "question" ? "Question for you" : card.kind === "connect" ? "Connect an app" : card.kind === "account" ? "Choose an account" : "Needs your approval"}</span>
-      </div>
-      <div className="p-4">
-        <div className="text-[15px] leading-snug font-medium">{card.title}</div>
-        {card.detail && <div className="mt-1.5 text-body-sm whitespace-pre-wrap text-foreground/65">{card.detail}</div>}
+    <section aria-labelledby={titleId} className="surface qdot-card-in w-full max-w-[580px] overflow-hidden rounded-2xl shadow-elevated">
+      <header className="flex items-center gap-2.5 border-b border-black/[0.06] bg-popover px-4 py-2.5 dark:border-white/[0.08]">
+        <span className={"flex size-6 shrink-0 items-center justify-center rounded-full " + meta.tone}>
+          <meta.Icon className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+        </span>
+        <span className="eyebrow">{meta.label}</span>
+        <span className="ml-auto flex items-center gap-1.5 text-caption text-foreground/50">
+          <span className="size-1.5 animate-pulse rounded-full bg-warning motion-reduce:animate-none" aria-hidden="true" />
+          Waiting for you
+        </span>
+      </header>
+
+      <div className="p-4 sm:p-5">
+        <h3 id={titleId} className="text-[16px] leading-snug font-medium">
+          {card.title}
+        </h3>
+        {card.detail &&
+          (card.kind === "approval" ? (
+            <div className="mt-3 rounded-lg bg-black/[0.035] px-3 py-2.5 text-body-sm whitespace-pre-wrap text-foreground/70 dark:bg-white/[0.05]">{card.detail}</div>
+          ) : (
+            <p className="mt-1.5 text-body-sm whitespace-pre-wrap text-foreground/65">{card.detail}</p>
+          ))}
 
         {card.kind === "connect" && <ConnectActions m={m} />}
 
         {card.kind === "account" && (
-          <div className="mt-4 space-y-2">
-            {card.choices?.map((c) => (
-              <button
-                key={c.value}
-                className="flex w-full items-center gap-3 rounded-xl border border-black/10 px-3.5 py-2.5 text-left text-[14px] transition-colors hover:border-black/30 hover:bg-black/[0.03] disabled:opacity-60 dark:border-white/10 dark:hover:border-white/30 dark:hover:bg-white/[0.05]"
-                disabled={pending}
-                onClick={() => act("answer", c.value)}
-              >
-                <span className="min-w-0 flex-1 truncate font-medium">{c.label}</span>
-                {c.note && <span className="shrink-0 font-mono text-[11px] text-foreground/45">{c.note}</span>}
+          <div className="mt-4">
+            <div role="group" aria-label="Accounts" className="space-y-2">
+              {card.choices?.map((c) => {
+                const isNew = c.value === "__new__";
+                const loading = busy === "answer:" + c.value;
+                return (
+                  <button
+                    key={c.value}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => act("answer", c.value)}
+                    className={
+                      "flex min-h-[52px] w-full items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors disabled:opacity-60 " +
+                      (isNew
+                        ? "border-dashed border-black/20 text-foreground/75 hover:border-black/40 hover:bg-black/[0.03] dark:border-white/20 dark:hover:border-white/40 dark:hover:bg-white/[0.05] "
+                        : "border-black/10 hover:border-black/30 hover:bg-black/[0.03] dark:border-white/10 dark:hover:border-white/30 dark:hover:bg-white/[0.05] ") +
+                      FOCUS
+                    }
+                  >
+                    {isNew ? (
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.08]">
+                        <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                      </span>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={"https://logos.composio.dev/api/" + (card.toolkit ?? "")} alt="" className="size-8 shrink-0 rounded-full border border-black/10 bg-card object-contain p-1.5 dark:border-white/10" />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] font-medium">{c.label}</span>
+                      {c.note && <span className="block truncate font-mono text-[11px] text-foreground/45">{c.note}</span>}
+                    </span>
+                    {loading ? Spin : !isNew && <span className="size-4 shrink-0 rounded-full border border-foreground/30" aria-hidden="true" />}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button type="button" className={"btn-quiet h-9 px-2.5 " + FOCUS} disabled={pending} onClick={() => act("deny")}>
+                Not now
               </button>
-            ))}
-            <button className="btn-quiet h-8 px-2 text-[13px]" disabled={pending} onClick={() => act("deny")}>
-              Not now
-            </button>
+              <span className="text-caption text-foreground/45">You can change this later in Setup → Accounts.</span>
+            </div>
           </div>
         )}
 
         {card.kind === "approval" && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button className="btn-primary h-8 px-3 text-[13px]" disabled={pending} onClick={() => act("approve")}>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button type="button" className={"btn-primary h-10 w-full sm:w-auto sm:px-5 " + FOCUS} disabled={pending} onClick={() => act("approve")}>
+              {busy === "approve" && Spin}
               Approve
             </button>
-            <button className="btn-secondary h-8 px-3 text-[13px]" disabled={pending} onClick={() => act("deny")}>
+            <button type="button" className={"btn-secondary h-10 w-full sm:w-auto sm:px-5 " + FOCUS} disabled={pending} onClick={() => act("deny")}>
+              {busy === "deny" && Spin}
               Deny
             </button>
+            <span className="text-caption text-foreground/45 sm:ml-auto">Nothing happens until you approve.</span>
           </div>
         )}
 
         {card.kind === "question" && (
-          <div className="mt-4 space-y-2.5">
+          <div className="mt-4 space-y-3">
             {!!card.options?.length && (
               <div className="flex flex-wrap gap-2">
                 {card.options.map((o) => (
-                  <button key={o} className="btn-secondary h-8 px-3 text-[13px]" disabled={pending} onClick={() => act("answer", o)}>
+                  <button key={o} type="button" className={"btn-secondary h-10 px-4 " + FOCUS} disabled={pending} onClick={() => act("answer", o)}>
+                    {busy === "answer:" + o && Spin}
                     {o}
                   </button>
                 ))}
@@ -1332,15 +1410,15 @@ function CardRow({ m }: { m: Message }) {
                 if (answer.trim()) act("answer", answer.trim());
               }}
             >
-              <input className="field h-8" placeholder="Type your own answer" value={answer} onChange={(e) => setAnswer(e.target.value)} />
-              <button className="btn-primary h-8 px-3 text-[13px]" disabled={pending || !answer.trim()}>
+              <input className="field h-10" aria-label="Your own answer" placeholder={card.options?.length ? "Or type your own answer" : "Type your answer"} value={answer} onChange={(e) => setAnswer(e.target.value)} />
+              <button className={"btn-primary h-10 px-4 " + FOCUS} disabled={pending || !answer.trim()}>
                 Send
               </button>
             </form>
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1348,23 +1426,32 @@ function ConnectActions({ m }: { m: Message }) {
   const card = m.card!;
   const [pending, start] = useTransition();
   const [notYet, setNotYet] = useState(false);
+  const app = card.title.replace(/^Connect\s+/i, "");
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-2">
-      <button className="btn-primary h-8 px-3 text-[13px]" disabled={!card.url} onClick={() => window.open(card.url, "_blank", "noopener")}>
-        <Plug className="size-3.5" strokeWidth={1.75} /> {card.title}
-        <ExternalLink className="size-3 opacity-60" strokeWidth={1.75} />
+    <div className="mt-4 space-y-3">
+      <button type="button" className={"btn-primary h-10 w-full sm:w-auto sm:px-5 " + FOCUS} disabled={!card.url} onClick={() => window.open(card.url, "_blank", "noopener")}>
+        <Plug className="size-4" strokeWidth={1.75} aria-hidden="true" />
+        Sign in to {app}
+        <ExternalLink className="size-3.5 opacity-60" strokeWidth={1.75} aria-hidden="true" />
       </button>
-      <button
-        className="btn-secondary h-8 px-3 text-[13px]"
-        disabled={pending}
-        onClick={() => start(async () => setNotYet(!(await confirmConnectCard(m.id))))}
-      >
-        I&apos;ve connected
-      </button>
-      <button className="btn-quiet" disabled={pending} onClick={() => start(() => resolveCard(m.id, "deny"))}>
-        Not now
-      </button>
-      {notYet && <span className="text-caption text-foreground/50">Not connected yet. Finish signing in, then try again.</span>}
+      <p className="text-caption text-foreground/55">After you sign in, this continues on its own. If it doesn&apos;t, press &ldquo;I&apos;ve signed in&rdquo;.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className={"btn-secondary h-9 px-3.5 " + FOCUS}
+          disabled={pending}
+          onClick={() => start(async () => setNotYet(!(await confirmConnectCard(m.id))))}
+        >
+          {pending && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+          I&apos;ve signed in
+        </button>
+        <button type="button" className={"btn-quiet h-9 px-2.5 " + FOCUS} disabled={pending} onClick={() => start(() => resolveCard(m.id, "deny"))}>
+          Not now
+        </button>
+      </div>
+      <p role="status" aria-live="polite" className="text-caption text-foreground/55">
+        {notYet ? "Not signed in yet. Finish signing in, then try again." : ""}
+      </p>
     </div>
   );
 }
