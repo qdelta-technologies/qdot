@@ -724,9 +724,13 @@ Account: your connected LinkedIn account`,
         const at = localTimeToMs(onceText, tz);
         if (at === null) return `I could not read the time "${onceText}". Use a local date and time like 2026-10-10T09:00.`;
         if (at < Date.now() + 20_000) return "That time has already passed. Pick a time in the future (at least a minute from now).";
+        const twin = repo.listRoutines(ctx.dot.id).find((x) => x.once && x.runAt !== null && Math.abs(x.runAt - at) < 60_000 && x.name.trim().toLowerCase() === s(a.name).trim().toLowerCase());
+        if (twin) return `A one-time routine named "${twin.name}" already exists for that time (id ${twin.id}), so I did NOT create another one. Tell the user it is already set up.`;
         r = repo.addRoutine({ dotId: ctx.dot.id, name: s(a.name), instruction: s(a.instruction), schedule: "once", timezone: tz, runAt: at });
       } else {
         if (!repo.validSchedule(s(a.schedule))) return `Invalid cron expression: ${s(a.schedule)}`;
+        const twin = repo.listRoutines(ctx.dot.id).find((x) => !x.once && x.schedule === s(a.schedule).trim() && x.name.trim().toLowerCase() === s(a.name).trim().toLowerCase());
+        if (twin) return `A routine named "${twin.name}" with that schedule already exists (id ${twin.id}), so I did NOT create another one. Tell the user it is already set up.`;
         r = repo.addRoutine({ dotId: ctx.dot.id, name: s(a.name), instruction: s(a.instruction), schedule: s(a.schedule), timezone: tz });
       }
       recordAutomation({

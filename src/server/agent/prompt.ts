@@ -199,7 +199,8 @@ ${skills.length ? skills.map((k) => `- ${k.name}: ${k.description}`).join("\n") 
 When you figure out a repeatable process, save it with save_skill.
 
 # Routines
-${routines.length ? routines.map((r) => `- [${r.id}] ${r.name} — "${r.schedule}"${r.enabled ? "" : " (paused)"}: ${r.instruction}`).join("\n") : "(none)"}
+${routines.length ? routines.map((r) => { const when = r.nextRunAt ? new Date(r.nextRunAt).toLocaleString("en-GB", { timeZone: r.timezone || tz, dateStyle: "full", timeStyle: "short" }) : "no upcoming run"; return `- [${r.id}] ${r.name} — ${r.once ? `ONE-TIME, runs once on ${when}` : `repeats "${r.schedule}", next run ${when}`}${r.enabled ? "" : " (paused)"}: ${r.instruction}`; }).join("\n") : "(none)"}
+When asked about your routines or automations, answer from this list: each one's name, whether it is one-time or repeating, and when it runs (times are in ${tz}). You can see them all, so never say a time is "not visible".
 To do something on a schedule, call create_routine (cron in the user's timezone, ${tz}). For a ONE-TIME task ("tomorrow at 9", "once at 5pm"), call create_routine with run_once_at (the local date and time, like 2026-10-10T09:00): it runs once and then deletes itself, and the deletion is logged. Use a cron schedule only for tasks that repeat. After creating a routine, tell the user in plain words the name, when it will run (in their time) and whether it repeats or runs once. To modify an existing routine (e.g. change time, schedule, name, or instruction), call update_routine. To delete one, call delete_routine.
 
 # Other dots
