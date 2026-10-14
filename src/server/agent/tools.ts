@@ -276,8 +276,9 @@ export const TOOLS: ToolDef[] = [
     execute: async (a, ctx) => {
       const p = s(a.path).trim().replace(/^\.\//, "");
       if (!isSafeWorkspacePath(p)) return "That path is not allowed. Use a path inside your workspace, such as uploads/photo.jpg.";
-      const data = await computer.readFile(ctx.dot.id, p).catch(() => null);
-      if (!data) return `I couldn't find "${p}" in your workspace. Check the name with ls uploads.`;
+      let data = await computer.readFile(ctx.dot.id, p).catch(() => null);
+      if (!data || !data.length) data = await files.restoreFromAttachment(ctx.dot.id, p); // brings a backed-up file back from Drive
+      if (!data.length) return `I couldn't find "${p}" in your workspace or among your attachments. Check the name with ls uploads.`;
       const { token, expiresAt } = createFileToken(ctx.dot.id, p);
       const url = `${composio.getAppUrl()}/api/public-files/${token}`;
       const mins = Math.round((expiresAt - Date.now()) / 60_000);

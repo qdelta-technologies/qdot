@@ -93,9 +93,25 @@ export async function upload(dotId: string, name: string, mime: string, data: Bu
   return { ...saved, boxPath };
 }
 
+/**
+ * A file the dot no longer has in its workspace (the server copy is cleaned up a week after its Drive backup): find the user's attachment
+ * by name, read it from the server or from the Drive backup, and put it back into the workspace. Empty if there is no single match.
+ * This runs on the server with QDot's own Drive connection, so Google Drive does not need to be linked to the dot.
+ */
+export async function restoreFromAttachment(dotId: string, p: string): Promise<Buffer> {
+  const name = p.trim().split("/").pop() ?? "";
+  const found = findForDot(dotId, name);
+  if (!found.length || new Set(found.map((f) => f.name.toLowerCase())).size > 1) return Buffer.alloc(0);
+  const content = await readContent(found[0].id);
+  if (content.length) await computer.writeFile(dotId, `uploads/${safeName(found[0].name)}`, content).catch(() => null);
+  return content;
+}
+
 /** The dot shares a file from its computer with the user. */
 export async function shareFromComputer(dotId: string, p: string): Promise<Attachment> {
-  const data = await computer.readFile(dotId, p);
+  let data: Buffer | null = await computer.readFile(dotId, p).catch(() => null);
+  if (!data || !data.length) data = await restoreFromAttachment(dotId, p);
+  if (!data.length) throw new Error(`I couldn't find "${p}" in your workspace or among your attachments.`);
   if (data.length > MAX_UPLOAD * 4) throw new Error("That file is too large to share (over 100 MB).");
   const name = safeName(path.basename(p));
   return save(dotId, name, guessMime(name), data, "dot", p);
