@@ -674,6 +674,22 @@ Account: your connected LinkedIn account`,
     execute: async (a) => (repo.deleteMemory(s(a.memory_id)), "Forgotten."),
   },
   {
+    name: "file_backup_status",
+    label: "Checking file backups",
+    description: "Check whether the files the user attached to you are backed up. QDot backs up every attachment to the user's Google Drive automatically, and you do not need Google Drive linked to check this. Use it when asked whether files are saved, stored or backed up.",
+    parameters: obj({ name: nullableStr("Part of a file name to check, or null for the latest files") }),
+    execute: async (a, ctx) => {
+      const q = s(a.name).trim().toLowerCase();
+      const mine = files.listFiles().filter((f) => f.dotId === ctx.dot.id && f.source === "user" && (!q || q === "null" || f.name.toLowerCase().includes(q))).slice(0, 15);
+      const drive = files.isGoogleDriveConnected();
+      const head = `Google Drive backup is ${drive ? "ON" : "OFF (Google Drive is not connected in the user's Composio library)"}. Backed-up files are in Google Drive > QDot Uploads > a folder for this dot.`;
+      if (!mine.length) return `${head}\nNo attachments found for you.`;
+      const when = (t: number) => new Date(t).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: userTimeZone() });
+      const lines = mine.map((f) => `- ${f.name} (${(f.size / 1048576).toFixed(1)} MB, attached ${when(f.createdAt)}): ${f.driveFileId ? "backed up to Google Drive" : drive ? "not backed up yet (the server retries every 15 minutes)" : "NOT backed up"}; copy on the server: ${f.localCopy ? "yes" : "no (cleaned up after the backup; it is restored from Drive automatically when needed)"}`);
+      return [head, ...lines, "Tell the user in plain words. Seeing or browsing the Drive folder itself needs Google Drive linked to you (app_connect googledrive); the backup does not."].join("\n");
+    },
+  },
+  {
     name: "unlink_app_account",
     label: "Unlinking an app",
     description: "Unlink an app from yourself when the user asks (for example 'disconnect LinkedIn from you'). The account stays connected in Settings and can be linked again.",
