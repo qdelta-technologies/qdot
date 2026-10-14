@@ -4,7 +4,7 @@ import path from "node:path";
 import { db, DATA_DIR, id, getSetting, setSetting } from "./db";
 import * as computer from "./computer";
 import { apps as composioApps, signedIn as composioSignedIn, executeTool, getAppUrl } from "./composio";
-import { createStoredFileToken } from "./links";
+import { createStoredFileToken, mimeForPath } from "./links";
 import type { Attachment } from "@/lib/types";
 
 // Files that move between the user and a dot. The canonical copy lives in .data/files/<id>
@@ -27,7 +27,7 @@ export function guessMime(name: string): string {
       ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".zip": "application/zip",
       ".py": "text/x-python", ".js": "text/javascript", ".ts": "text/plain",
     } as Record<string, string>
-  )[ext] ?? "application/octet-stream";
+  )[ext] ?? mimeForPath(name); // links.ts knows the rest (video, audio, HEIC...); it answers application/octet-stream only for unknown types
 }
 
 /** Thrown when files.upload() is called but Google Drive is not connected. */
