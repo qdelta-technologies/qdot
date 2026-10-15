@@ -18,6 +18,7 @@ import * as composio from "../composio";
 import type { AppTrigger, Attachment, CardData, Dot, Routine } from "@/lib/types";
 import * as files from "../files";
 import { extractText } from "unpdf";
+import { lastFailure, unverifiedClaim, type RunCall } from "./claims";
 
 type Call = ResponseFunctionToolCall | ResponseComputerToolCall;
 type Pending = {
@@ -370,6 +371,11 @@ async function turn(dotId: string, text: string, trigger: Trigger, signal: Abort
 async function drive(dot: Dot, prevId: string | null, input: ResponseInputItem[], trigger: Trigger, signal: AbortSignal, conversationId?: string | null) {
   const convId = conversationId ?? repo.currentConversation(dot.id);
   const seenCalls = new Map<string, number>();
+  // What the dot really did in this run, so "done, the leads are saved" can be checked against it.
+  // A run that resumes after an approval cannot see the calls from before the pause, so it is not checked.
+  const ran: RunCall[] = [];
+  let claimNudges = 0;
+  const isResume = input.some((i) => (i as { type?: string }).type === "function_call_output");
   for (let step = 0; step < MAX_STEPS; step++) {
     signal.throwIfAborted();
     let resp: Response;
@@ -404,6 +410,27 @@ async function drive(dot: Dot, prevId: string | null, input: ResponseInputItem[]
           input = [{ role: "user", content: "Proceed immediately. Execute web_search and your app tools right now to retrieve the actual details and update the sheet." }];
           continue;
         }
+        // It says the leads are saved or the sheet is updated, yet no save or sheet write succeeded: send it back to do the work.
+        if (!isResume && msgText && unverifiedClaim(msgText, ran)) {
+          if (claimNudges < 2) {
+            claimNudges++;
+            const bad = lastFailure(ran);
+            input = [
+              {
+                role: "user",
+                content:
+                  "Check: you said the leads were saved or the sheet was updated, but no save_lead call and no Google Sheets write succeeded in this run" +
+                  (bad ? ` (the last error was: ${bad.output.slice(0, 200)})` : "") +
+                  ". Do it now with your tools: save_lead for each lead, then add the rows to the sheet. If something is blocking you, say plainly what failed. Do not say it is done until a tool call has succeeded.",
+              },
+            ];
+            continue;
+          }
+          repo.addMessage({
+            dotId: dot.id, role: "system", conversationId: conversationId,
+            text: "Heads up: it said the leads were saved, but no lead was saved and no sheet row was added in this run. Ask it to try again, and check the connection to Google Sheets.",
+          });
+        }
         return;
       }
     }
@@ -423,6 +450,11 @@ async function drive(dot: Dot, prevId: string | null, input: ResponseInputItem[]
     }
     const pending: Pending = { responseId: resp.id, calls, outputs: [], index: 0, cardId: null, trigger };
     if (await processCalls(dot, pending, signal)) return; // waiting on the user
+    for (const c of calls) {
+      if (c.type !== "function_call") continue;
+      const out = pending.outputs.find((o) => (o as { call_id?: string }).call_id === c.call_id) as { output?: unknown } | undefined;
+      ran.push({ name: c.name, args: typeof c.arguments === "string" ? c.arguments : "", output: typeof out?.output === "string" ? out.output : "" });
+    }
     prevId = resp.id;
     input = pending.outputs;
   }
