@@ -14,6 +14,7 @@ import {
   Lock,
   LogOut,
   Moon,
+  Copy,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -380,6 +381,9 @@ function ConnectedApp({ app }: { app: { slug: string; name: string; logo?: strin
   const [confirming, setConfirming] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [newAlias, setNewAlias] = useState("");
+  // A sign-in link to paste into a private window (see the note shown while adding an account)
+  const [privateLink, setPrivateLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
 
   const load = () =>
@@ -455,23 +459,66 @@ function ConnectedApp({ app }: { app: { slug: string; name: string; logo?: strin
           ))}
 
           {adding ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <input className="field h-9 min-w-0 flex-1 basis-40 text-[13px]" value={newAlias} onChange={(e) => setNewAlias(e.target.value)} placeholder={`Name for the new ${app.name} account`} autoFocus />
-              <button
-                className="btn-primary h-9 px-3 text-[13px]"
-                disabled={pending || !newAlias.trim()}
-                onClick={() =>
-                  start(() =>
-                    openAfter(() => addAppAccount(app.slug, newAlias), setError).then(() => {
-                      setAdding(false);
-                      setNewAlias("");
-                    })
-                  )
-                }
-              >
-                Sign in
-              </button>
-              <button className="btn-quiet h-9 px-3 text-[13px]" onClick={() => setAdding(false)}>Cancel</button>
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <input className="field h-9 min-w-0 flex-1 basis-40 text-[13px]" value={newAlias} onChange={(e) => setNewAlias(e.target.value)} placeholder={`Name for the new ${app.name} account`} autoFocus />
+                <button
+                  className="btn-primary h-9 px-3 text-[13px]"
+                  disabled={pending || !newAlias.trim()}
+                  onClick={() =>
+                    start(() =>
+                      openAfter(() => addAppAccount(app.slug, newAlias), setError).then(() => {
+                        setAdding(false);
+                        setNewAlias("");
+                        setPrivateLink(null);
+                      })
+                    )
+                  }
+                >
+                  Sign in
+                </button>
+                <button className="btn-quiet h-9 px-3 text-[13px]" onClick={() => { setAdding(false); setPrivateLink(null); }}>Cancel</button>
+              </div>
+              <div className="rounded-lg bg-foreground/[0.04] p-3 text-[12.5px] leading-relaxed text-foreground/70">
+                <b className="font-medium text-foreground/85">Adding a different {app.name} account?</b> The sign-in page opens in this browser, which is probably
+                already signed in to your first account, so {app.name} connects that same account again and the new one never appears.
+                To add a <i>different</i> account, get the link below, open a <b className="font-medium">private (incognito) window</b> and sign in there.
+                <div className="mt-2">
+                  <button
+                    className="btn-secondary h-8 px-3 text-[12.5px]"
+                    disabled={pending || !newAlias.trim()}
+                    onClick={() =>
+                      start(async () => {
+                        const r = await addAppAccount(app.slug, newAlias);
+                        if (r.error) setError(r.error);
+                        else if (r.url) {
+                          setError(null);
+                          setCopied(false);
+                          setPrivateLink(r.url);
+                        }
+                      })
+                    }
+                  >
+                    Get the link for a private window
+                  </button>
+                </div>
+                {privateLink && (
+                  <div className="mt-2.5 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <input readOnly className="field h-8 min-w-0 flex-1 text-[12px]" value={privateLink} aria-label="Sign-in link" onFocus={(e) => e.currentTarget.select()} />
+                      <button
+                        className="btn-primary h-8 px-3 text-[12.5px]"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(privateLink).then(() => setCopied(true)).catch(() => {});
+                        }}
+                      >
+                        <Copy className="size-3.5" strokeWidth={1.75} /> {copied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <div>Open a private window (Ctrl+Shift+N in Chrome or Edge, Ctrl+Shift+P in Firefox), paste the link, and sign in with the other account. This page notices when it is done.</div>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">

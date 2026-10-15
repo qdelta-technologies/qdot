@@ -518,7 +518,11 @@ export async function startConnect(toolkit: string, originOverride?: string, ali
         await new Promise((r) => setTimeout(r, 5000));
         if (label ? activeCount(await listAccounts(toolkit)) > baseline : await isConnected(toolkit).catch(() => false)) return;
       }
-      throw new Error("Timed out waiting for the connection.");
+      throw new Error(
+        label
+          ? "The new account never appeared. If the sign-in page opened the account that is already connected, it cannot be added twice: sign in from a private (incognito) window, or sign out of that account first, then try again."
+          : "Timed out waiting for the connection."
+      );
     },
   };
 }

@@ -1433,6 +1433,7 @@ function ConnectActions({ m }: { m: Message }) {
   const card = m.card!;
   const [pending, start] = useTransition();
   const [notYet, setNotYet] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const app = card.title.replace(/^Connect\s+/i, "").replace(/\s*\([^)]*\)\s*$/, "");
   return (
     <div className="mt-4 space-y-3">
@@ -1442,6 +1443,25 @@ function ConnectActions({ m }: { m: Message }) {
         <ExternalLink className="size-3.5 opacity-60" strokeWidth={1.75} aria-hidden="true" />
       </button>
       <p className="text-caption text-foreground/55">After you sign in, this continues on its own. If it doesn&apos;t, press &ldquo;I&apos;ve signed in&rdquo;.</p>
+      {card.alias && (
+        <div className="rounded-lg bg-foreground/[0.04] p-3 text-caption leading-relaxed text-foreground/65">
+          <b className="font-medium text-foreground/80">Adding a different {app} account?</b> This browser is probably already signed in to your first one, and {app} would just connect that
+          same account again. Copy the link, open a <b className="font-medium">private (incognito) window</b>, paste it there and sign in with the other account.
+          <div className="mt-2">
+            <button
+              type="button"
+              className={"btn-secondary h-8 px-3 " + FOCUS}
+              disabled={!card.url}
+              onClick={() => {
+                if (card.url) void navigator.clipboard?.writeText(card.url).then(() => setLinkCopied(true)).catch(() => {});
+              }}
+            >
+              <Copy className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+              {linkCopied ? "Link copied" : "Copy link for a private window"}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -1457,7 +1477,11 @@ function ConnectActions({ m }: { m: Message }) {
         </button>
       </div>
       <p role="status" aria-live="polite" className="text-caption text-foreground/55">
-        {notYet ? "Not signed in yet. Finish signing in, then try again." : ""}
+        {notYet
+          ? card.alias
+            ? "Not added yet. If the sign-in page went straight to your first account, that account was already connected. Use a private window to sign in with the other one."
+            : "Not signed in yet. Finish signing in, then try again."
+          : ""}
       </p>
     </div>
   );
