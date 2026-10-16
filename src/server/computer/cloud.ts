@@ -15,6 +15,12 @@ import type { ComputerAction } from "./browser";
 export const CLOUD_SCREEN = { width: 1280, height: 800 };
 export const WORKSPACE = "/home/user/workspace";
 const IDLE_MS = 10 * 60_000;
+// While the user drives the computer (Take over), their clicks in the live view do not count as activity for E2B,
+// so give it longer before it sleeps, e.g. while they read a login code in their email.
+const TAKEOVER_MS = 30 * 60_000;
+/** Dots whose computer the user is driving right now. */
+const takingOver = new Set<string>();
+export const endTakeover = (dotId: string) => void takingOver.delete(dotId);
 const MAX_OUTPUT = 12_000;
 
 // The E2B key comes from E2B_API_KEY (development) or from Settings, sealed with the vault key (the desktop app
@@ -154,7 +160,7 @@ export async function box(dotId: string): Promise<Box> {
   // Keep it awake while in use (at most one keep-alive call every 30s).
   if (Date.now() - ready.touchedAt > 30_000) {
     ready.touchedAt = Date.now();
-    const alive = await ready.sb.setTimeout(IDLE_MS).then(() => true, () => false);
+    const alive = await ready.sb.setTimeout(takingOver.has(dotId) ? TAKEOVER_MS : IDLE_MS).then(() => true, () => false);
     if (!alive) {
       // E2B paused it after the idle time, so this connection is stale: reconnect now (resumes the same computer)
       // instead of failing this request and only fixing the next one.
@@ -345,6 +351,11 @@ export async function liveUrl(dotId: string, interactive: boolean): Promise<stri
 
 async function liveUrlOnce(dotId: string, interactive: boolean): Promise<string> {
   const b = await box(dotId);
+  if (interactive) {
+    takingOver.add(dotId);
+    b.touchedAt = Date.now();
+    await b.sb.setTimeout(TAKEOVER_MS).catch(() => {});
+  }
   if (!b.streaming) {
     await b.sb.stream.start({ requireAuth: true }).catch(async (err: unknown) => {
       if (!/already/i.test(String(err))) throw err;

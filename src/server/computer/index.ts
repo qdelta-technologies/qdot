@@ -131,7 +131,8 @@ export async function wake(dotId: string) {
 }
 
 export async function handBack(dotId: string) {
-  if (!isCloud(dotId)) await browser.handBack(dotId);
+  if (isCloud(dotId)) cloud.endTakeover(dotId);
+  else await browser.handBack(dotId);
 }
 
 export { saveCloudKey } from "./cloud";
