@@ -345,7 +345,8 @@ Account: your connected LinkedIn account`,
     execute: async (a, ctx) => {
       let url = s(a.url);
       const onLinkedIn = leads.isLinkedIn(url);
-      if (onLinkedIn) {
+      if (onLinkedIn && !leads.isLinkedInSignInPage(url)) {
+        // The sign-in page itself is never held back by a pause or the page limit: it is how the dot gets signed in.
         const stop = await leads.linkedInGate(ctx.dot.id);
         if (stop) return stop;
         // LinkedIn's bare home page refuses cloud computers ("Sorry, you have been blocked"), but /feed/ works:
@@ -353,6 +354,10 @@ Account: your connected LinkedIn account`,
         if (/^(https?:\/\/)?([a-z]{2,3}\.|www\.)?linkedin\.com\/?(\?.*)?$/i.test(url.trim())) url = "https://www.linkedin.com/feed/";
       }
       const out = await computer.openUrl(ctx.dot.id, url);
+      if (onLinkedIn && leads.isLinkedInSignInPage(out.match(/^Opened (\S+)/)?.[1] ?? "")) {
+        // Only a sign-in page: not a check, so no pause. Sign in with the saved login, then go on.
+        return `${out}\n\nNOTE: LinkedIn is showing its sign-in page, so this browser is not signed in. This is not a security check. Call sign_in with site "linkedin.com" (the saved login, if there is one), click the Sign in button, then open the page you wanted again. If there is no saved login, ask the user to add one under Settings, Passwords, or to take over and sign in. If after signing in LinkedIn asks for a code or a security check, stop and tell the user.`;
+      }
       if (onLinkedIn && leads.looksLikeLinkedInCheck(`${url} ${out}`)) {
         leads.pauseLinkedIn(`a check or login wall appeared at ${url.slice(0, 120)}`);
         return `${out}\n\nSTOP: LinkedIn is showing a check, login wall or warning. Do NOT try to solve it, retry, or go around it. Tell the user plainly what you see and wait for them.`;
@@ -647,7 +652,19 @@ Account: your connected LinkedIn account`,
       "Fill the login form on the current browser page using the user's saved password for a site. You never see the password. Open the site's sign-in page first, then submit the form yourself afterwards.",
     parameters: obj({ site: str("Site/domain of the login, e.g. github.com") }),
     describe: (a) => `sign in to ${s(a.site)} with the user's saved password`,
-    defaultDecision: () => "ask",
+    // Signs in without asking only when the page that is open really belongs to that site, so the saved password
+    // can never be typed into some other page. Anywhere else it asks first.
+    defaultDecision: async (ctx, a) => {
+      try {
+        const url = (await computer.readPage(ctx.dot.id)).match(/^URL: (\S+)/)?.[1];
+        if (url) {
+          const page = repo.hostOf(url);
+          const want = repo.hostOf(s(a.site));
+          if (page === want || page.endsWith(`.${want}`) || want.endsWith(`.${page}`)) return "allow";
+        }
+      } catch {}
+      return "ask";
+    },
     execute: async (a, ctx) => {
       const cred = credentialFor(s(a.site));
       if (!cred) return `No saved password for ${s(a.site)}. Ask the user to add one under Passwords (never ask them to paste it in chat), or to take over your computer and log in themselves.`;

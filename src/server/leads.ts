@@ -227,9 +227,12 @@ const dayKey = (dotId: string) => `linkedin_pages:${new Date().toISOString().sli
 
 export const isLinkedIn = (url: string) => /(^|\/\/|\.)linkedin\.com/i.test(url);
 
-/** A LinkedIn page that is asking for a check, a login, or that says activity looks unusual. */
+/** A LinkedIn page that is asking for a security check, or that says activity looks unusual. */
 export const looksLikeLinkedInCheck = (text: string) =>
-  /checkpoint|captcha|authwall|challenge|security verification|unusual activity|let's do a quick security check|verify you're a human|restricted/i.test(text);
+  /checkpoint|captcha|challenge|security verification|unusual activity|let's do a quick security check|verify you're a human|restricted/i.test(text);
+
+/** LinkedIn's plain "please sign in" pages. They are not a security check: the browser just is not signed in yet. */
+export const isLinkedInSignInPage = (url: string) => /linkedin\.com\/(authwall|login|uas\/login)/i.test(url);
 
 export function linkedInPaused(): string | null {
   return getSetting("linkedin_paused");
