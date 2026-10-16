@@ -296,8 +296,12 @@ export async function doAction(dotId: string, action: ComputerAction): Promise<v
 export async function liveUrl(dotId: string, interactive: boolean): Promise<string> {
   const b = await box(dotId);
   if (!b.streaming) {
-    await b.sb.stream.start({ requireAuth: true }).catch((err: unknown) => {
+    await b.sb.stream.start({ requireAuth: true }).catch(async (err: unknown) => {
       if (!/already/i.test(String(err))) throw err;
+      // A resumed box still runs the stream from before it was paused, and this connection never learned its
+      // password (so getAuthKey fails). Stop the old one and start a fresh stream that this connection owns.
+      await b.sb.commands.run('pkill x11vnc || true; pkill -f "[n]ovnc_proxy" || true; sleep 1').catch(() => {});
+      await b.sb.stream.start({ requireAuth: true });
     });
     b.streaming = true;
   }

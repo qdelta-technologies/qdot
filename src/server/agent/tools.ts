@@ -343,16 +343,23 @@ Account: your connected LinkedIn account`,
     describe: (a) => `open ${s(a.url)} in its browser`,
     defaultDecision: () => "allow",
     execute: async (a, ctx) => {
-      const url = s(a.url);
+      let url = s(a.url);
       const onLinkedIn = leads.isLinkedIn(url);
       if (onLinkedIn) {
         const stop = await leads.linkedInGate(ctx.dot.id);
         if (stop) return stop;
+        // LinkedIn's bare home page refuses cloud computers ("Sorry, you have been blocked"), but /feed/ works:
+        // it shows the feed when signed in and the normal sign-in page when not.
+        if (/^(https?:\/\/)?([a-z]{2,3}\.|www\.)?linkedin\.com\/?(\?.*)?$/i.test(url.trim())) url = "https://www.linkedin.com/feed/";
       }
       const out = await computer.openUrl(ctx.dot.id, url);
       if (onLinkedIn && leads.looksLikeLinkedInCheck(`${url} ${out}`)) {
         leads.pauseLinkedIn(`a check or login wall appeared at ${url.slice(0, 120)}`);
         return `${out}\n\nSTOP: LinkedIn is showing a check, login wall or warning. Do NOT try to solve it, retry, or go around it. Tell the user plainly what you see and wait for them.`;
+      }
+      // Some sites refuse cloud computers outright. Say so, so the dot neither loops nor starts installing things.
+      if (/you have been blocked|you are unable to access|Attention Required!|Access Denied|Error 1020|request blocked/i.test(out.slice(0, 600))) {
+        return `${out}\n\nNOTE: this site blocks cloud computers on this page. Do not retry the same URL or try to get around it. Try another page of the site (a deeper link, or its login page), or get the information another way (web_search, another site), and if you cannot, tell the user plainly which page was blocked.`;
       }
       return out;
     },

@@ -33,6 +33,20 @@ export function modeFor(dotId: string): ComputerMode {
 
 const isCloud = (dotId: string) => modeFor(dotId) === "cloud";
 
+/**
+ * On a hosted server (Railway) the "local" fallback would run a dot's commands and browser on the app's own
+ * machine, as root, next to the keys and the database. There a dot gets a cloud computer or none.
+ * DOTS_ALLOW_SERVER_COMPUTER=1 opts back in.
+ */
+const serverFallbackBlocked = (dotId: string) =>
+  Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID) && process.env.DOTS_ALLOW_SERVER_COMPUTER !== "1" && !isCloud(dotId);
+
+function guard(dotId: string) {
+  if (serverFallbackBlocked(dotId)) {
+    throw new Error("This dot has no computer: the cloud computer (E2B_API_KEY) isn't working on this server. Tell the user so. Do not try to install or run anything yourself.");
+  }
+}
+
 export function describe(dotId: string): string {
   switch (modeFor(dotId)) {
     case "cloud":
@@ -40,6 +54,7 @@ export function describe(dotId: string): string {
     case "docker":
       return `a Linux container (${BOX_IMAGE}) with a persistent /workspace, plus a Chromium browser`;
     default:
+      if (serverFallbackBlocked(dotId)) return "none right now (the cloud computer isn't set up on this server), so don't try to run commands or open a browser; tell the user if a task needs one";
       return "a sandbox folder on the user's Mac (commands ask first) plus a Chromium browser";
   }
 }
@@ -47,6 +62,7 @@ export function describe(dotId: string): string {
 // ---------- shell & files ----------
 
 export async function runCommand(dotId: string, command: string, signal?: AbortSignal): Promise<string> {
+  guard(dotId);
   return isCloud(dotId) ? cloud.run(dotId, command) : runOnDotComputer(dotId, command, signal);
 }
 
@@ -87,14 +103,14 @@ export async function listFiles(dotId: string): Promise<FileEntry[]> {
 
 // ---------- browser & screen ----------
 
-export const openUrl = (dotId: string, url: string) => (isCloud(dotId) ? cloud.openUrl(dotId, url) : browser.openUrl(dotId, url));
-export const readPage = (dotId: string) => (isCloud(dotId) ? cloud.readPage(dotId) : browser.readPage(dotId));
-export const fillLogin = (dotId: string, u: string, p: string) => (isCloud(dotId) ? cloud.fillLogin(dotId, u, p) : browser.fillLogin(dotId, u, p));
-export const clickText = (dotId: string, text: string) => (isCloud(dotId) ? cloud.clickText(dotId, text) : browser.clickText(dotId, text));
+export const openUrl = (dotId: string, url: string) => (guard(dotId), isCloud(dotId) ? cloud.openUrl(dotId, url) : browser.openUrl(dotId, url));
+export const readPage = (dotId: string) => (guard(dotId), isCloud(dotId) ? cloud.readPage(dotId) : browser.readPage(dotId));
+export const fillLogin = (dotId: string, u: string, p: string) => (guard(dotId), isCloud(dotId) ? cloud.fillLogin(dotId, u, p) : browser.fillLogin(dotId, u, p));
+export const clickText = (dotId: string, text: string) => (guard(dotId), isCloud(dotId) ? cloud.clickText(dotId, text) : browser.clickText(dotId, text));
 export const typeText = (dotId: string, field: string, value: string, submit: boolean) =>
-  isCloud(dotId) ? cloud.typeText(dotId, field, value, submit) : browser.typeText(dotId, field, value, submit);
-export const doAction = (dotId: string, a: ComputerAction) => (isCloud(dotId) ? cloud.doAction(dotId, a) : browser.doAction(dotId, a));
-export const screenshot = (dotId: string) => (isCloud(dotId) ? cloud.screenshot(dotId) : browser.screenshot(dotId));
+  (guard(dotId), isCloud(dotId) ? cloud.typeText(dotId, field, value, submit) : browser.typeText(dotId, field, value, submit));
+export const doAction = (dotId: string, a: ComputerAction) => (guard(dotId), isCloud(dotId) ? cloud.doAction(dotId, a) : browser.doAction(dotId, a));
+export const screenshot = (dotId: string) => (guard(dotId), isCloud(dotId) ? cloud.screenshot(dotId) : browser.screenshot(dotId));
 export const lastScreenshot = (dotId: string) => (isCloud(dotId) ? cloud.lastScreenshot(dotId) : browser.lastScreenshot(dotId));
 
 /** Live desktop stream (cloud only). */
