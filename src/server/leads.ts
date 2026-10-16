@@ -234,8 +234,19 @@ export const looksLikeLinkedInCheck = (text: string) =>
 /** LinkedIn's plain "please sign in" pages. They are not a security check: the browser just is not signed in yet. */
 export const isLinkedInSignInPage = (url: string) => /linkedin\.com\/(authwall|login|uas\/login)/i.test(url);
 
+// Before this time a plain sign-in wall was wrongly counted as a security check, so any pause saved earlier is
+// a false alarm: drop it instead of making the user clear a check that never happened.
+const FALSE_PAUSES_BEFORE = Date.parse("2026-10-16T04:10:00Z");
+
 export function linkedInPaused(): string | null {
-  return getSetting("linkedin_paused");
+  const reason = getSetting("linkedin_paused");
+  if (!reason) return null;
+  const at = Date.parse(reason.split(" ")[0]);
+  if (Number.isFinite(at) && at < FALSE_PAUSES_BEFORE) {
+    setSetting("linkedin_paused", null);
+    return null;
+  }
+  return reason;
 }
 
 export function pauseLinkedIn(reason: string) {
