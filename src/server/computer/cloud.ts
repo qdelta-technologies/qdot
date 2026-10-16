@@ -86,7 +86,9 @@ async function ensureChrome(sb: Sandbox) {
   if (await ready()) return;
   await sb.commands.run(
     "google-chrome --remote-debugging-port=9222 --user-data-dir=/home/user/.config/dots-chrome --no-first-run --no-default-browser-check --start-maximized --disable-features=Translate about:blank",
-    { background: true },
+    // timeoutMs 0: a background command is otherwise ended after E2B's default 60 s, which closed Chrome a minute
+    // after every start (the page vanished while the user was solving a captcha).
+    { background: true, timeoutMs: 0 },
   );
   for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 500));
