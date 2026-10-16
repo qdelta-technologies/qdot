@@ -28,7 +28,6 @@ import {
   Laptop,
   Loader2,
   MessageSquare,
-  Mic,
   MonitorSmartphone,
   Paperclip,
   Plug,
@@ -61,7 +60,9 @@ import { ThinkingOrb, type OrbState } from "thinking-orbs";
 import { compressImageIfLarge } from "@/lib/imageCompression";
 import { useDesktopSidebarOpen } from "@/lib/ui";
 import { StreamingMarkdown } from "./StreamingMarkdown";
-import { VoiceInputPill } from "./VoiceWaveform";
+import { DictationControl, DictationError } from "./DictationControl";
+import { useDictation } from "@/lib/useDictation";
+import { useDraft } from "@/lib/drafts";
 import type { Attachment, Dot, Message } from "@/lib/types";
 
 function getOrbState(activity: string | null | undefined): OrbState {
@@ -426,7 +427,8 @@ function Composer({
   onSend: (text: string, attachments: Attachment[]) => void;
   onVoice: () => void;
 }) {
-  const [text, setText] = useState("");
+  // Kept per dot, so leaving for another dot or tab and coming back does not lose what you typed.
+  const [text, setText] = useDraft(dot.id);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [drivePrompt, setDrivePrompt] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -454,146 +456,18 @@ function Composer({
       document.removeEventListener("keydown", onKey);
     };
   }, [attachOpen]);
-  const [isListening, setIsListening] = useState(false);
   const [pending, start] = useTransition();
-  const recognitionRef = useRef<any>(null);
-  const baseTextRef = useRef<string>("");
-  const textRef = useRef("");
-  textRef.current = text;
-  const userStoppedRef = useRef(false);
-  const micStreamRef = useRef<MediaStream | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const dict = useDictation(text, setText);
+  const isListening = dict.listening;
 
   const ready = uploads.filter((u) => u.state === "done" && u.file).map((u) => u.file!);
   const busy = uploads.some((u) => u.state === "uploading");
 
-  // Clean up speech recognition on unmount
-  useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {}
-      }
-    };
-  }, []);
-
-  const releaseMic = () => {
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
-    }
-  };
-
-  const stopListening = () => {
-    userStoppedRef.current = true;
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
-      // The last words are only delivered after stop(); the recognizer's onend releases the mic once they arrive. Fallback in case onend never fires.
-      setTimeout(releaseMic, 2500);
-    } else {
-      releaseMic();
-    }
-    setIsListening(false);
-  };
-
-  const startRecognition = () => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = navigator.language || "en-US";
-
-      recognition.onstart = () => { setIsListening(true); };
-
-      recognition.onresult = (event: any) => {
-        let interim = "";
-        let final = "";
-        for (let i = 0; i < event.results.length; ++i) {
-          const item = event.results[i];
-          if (item.isFinal) final += item[0].transcript;
-          else interim += item[0].transcript;
-        }
-        const spoken = (final + interim).trim();
-        if (spoken) {
-          const prefix = baseTextRef.current.trim() ? `${baseTextRef.current.trim()} ` : "";
-          setText(prefix + spoken);
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn("[speech recognition error]", event.error);
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          alert("Microphone permission was denied. Please allow microphone access in your browser to dictate.");
-          stopListening();
-        } else if (event.error === "audio-capture" || event.error === "network") {
-          // These used to fail silently on phones: the mic showed as recording but no text ever came.
-          alert(event.error === "network" ? "Voice typing needs an internet connection. Please try again." : "Could not use the microphone. Close other apps that use it and try again.");
-          stopListening();
-        }
-      };
-
-      // On mobile, the browser auto-fires onend after short silence.
-      // If the user did NOT explicitly stop, restart to keep listening.
-      recognition.onend = () => {
-        if (userStoppedRef.current) {
-          setIsListening(false);
-          releaseMic();
-        } else {
-          // Browser auto-stopped (iOS/Android silence detection) — restart
-          setTimeout(() => {
-            if (userStoppedRef.current) return;
-            // A new session's transcript starts empty, so keep what was already dictated as the base
-            baseTextRef.current = textRef.current;
-            startRecognition();
-          }, 200);
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      console.warn("[speech recognition start error]", err);
-      setIsListening(false);
-    }
-  };
-
+  // The mic never takes the keyboard focus from the text box (so Enter still sends).
   const toggleListening = () => {
-    if (isListening) {
-      stopListening();
-      return;
-    }
-
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Safari.");
-      return;
-    }
-
-    userStoppedRef.current = false;
-    baseTextRef.current = text;
-
-    // On phones, holding our own mic stream at the same time starves the speech recognizer (it listens but returns no text),
-    // so let the recognizer open the mic alone there. The waveform is only a nicety on desktop.
-    if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
-      startRecognition();
-      return;
-    }
-
-    // Get the mic stream first (single shared stream for both recognition + waveform)
-    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-      .then((stream) => {
-        micStreamRef.current = stream;
-        startRecognition();
-      })
-      .catch(() => {
-        alert("Microphone permission was denied. Please allow microphone access in your browser to dictate.");
-      });
+    dict.toggle();
+    taRef.current?.focus();
   };
 
   const addFiles = (list: File[]) => {
@@ -628,21 +502,7 @@ function Composer({
   };
 
   const submit = () => {
-    if (isListening) {
-      userStoppedRef.current = true;
-      if (recognitionRef.current) {
-        // Drop late transcript events so they can't refill the input after it's cleared
-        recognitionRef.current.onresult = null;
-        try {
-          recognitionRef.current.stop();
-        } catch {}
-      }
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach((t) => t.stop());
-        micStreamRef.current = null;
-      }
-      setIsListening(false);
-    }
+    if (isListening) dict.abort(); // late words must not refill the box after it is cleared
     const value = text.trim();
     if (!value && !ready.length && !busy) return;
     if (busy) {
@@ -769,28 +629,7 @@ function Composer({
         </div>
       )}
 
-      {isListening ? (
-        <VoiceInputPill
-          transcript={text}
-          micStream={micStreamRef.current ?? undefined}
-          onCancel={() => {
-            userStoppedRef.current = true;
-            if (recognitionRef.current) {
-              try { recognitionRef.current.abort(); } catch {}
-            }
-            if (micStreamRef.current) {
-              micStreamRef.current.getTracks().forEach((t) => t.stop());
-              micStreamRef.current = null;
-            }
-            setIsListening(false);
-            setText(baseTextRef.current || "");
-          }}
-          onStop={() => {
-            stopListening();
-          }}
-          onSubmit={submit}
-        />
-      ) : (
+      {(
         <div
           className={`rounded-[28px] border border-black/10 dark:border-white/10 bg-card p-2 pl-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.1)] dark:shadow-[0_10px_35px_-10px_rgba(0,0,0,0.35)] transition-all focus-within:border-black/25 dark:focus-within:border-white/25 focus-within:shadow-[0_8px_32px_-10px_rgba(0,0,0,0.15)] dark:focus-within:shadow-[0_14px_45px_-12px_rgba(0,0,0,0.4)] ${
             dragging ? "border-brand border-dashed bg-brand/[0.04]" : ""
@@ -887,9 +726,13 @@ function Composer({
             {/* Chat input textarea */}
             <textarea
               rows={1}
+              ref={taRef}
               autoFocus
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                setText(e.target.value);
+                dict.noteEdit();
+              }}
               onPaste={(e) => {
                 const pasted = [...e.clipboardData.files];
                 if (pasted.length) {
@@ -904,31 +747,26 @@ function Composer({
                 }
               }}
               placeholder={dragging ? "Drop files to attach..." : `Ask ${dot.name}...`}
-              className="max-h-52 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-[15px] leading-[1.5] tracking-default outline-none [field-sizing:content] placeholder:text-foreground/35 text-foreground"
+              className={`max-h-52 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-[15px] leading-[1.5] tracking-default outline-none [field-sizing:content] placeholder:text-foreground/35 ${isListening ? "italic text-foreground/60" : "text-foreground"}`}
             />
 
             {/* Voice / Stop / Send Action Button */}
             {isWorking || dot.status === "working" ? (
-              <button
-                type="button"
-                className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-foreground text-background shadow-xs transition-all hover:scale-105 active:scale-95"
-                onClick={onStop ? onStop : () => start(() => stopDot(dot.id))}
-                aria-label="Stop current task"
-                title="Stop task"
-              >
-                <Square className="size-3.5 fill-current" />
-              </button>
-            ) : text.trim() || ready.length || busy ? (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                {isListening && <DictationControl listening={isListening} stream={dict.stream} onToggle={toggleListening} />}
                 <button
                   type="button"
-                  className="flex size-8.5 shrink-0 items-center justify-center rounded-full text-foreground/50 transition-all hover:bg-black/[0.06] dark:hover:bg-white/[0.08] hover:text-foreground active:scale-95"
-                  onClick={toggleListening}
-                  aria-label="Dictate voice"
-                  title="Speak to dictate"
+                  className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-foreground text-background shadow-xs transition-all hover:scale-105 active:scale-95"
+                  onClick={onStop ? onStop : () => start(() => stopDot(dot.id))}
+                  aria-label="Stop current task"
+                  title="Stop task"
                 >
-                  <Mic className="size-4" strokeWidth={1.75} />
+                  <Square className="size-3.5 fill-current" />
                 </button>
+              </div>
+            ) : text.trim() || ready.length || busy ? (
+              <div className="flex items-center gap-1.5">
+                <DictationControl listening={isListening} stream={dict.stream} onToggle={toggleListening} />
                 <button
                   className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-foreground text-background shadow-xs transition-all hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                   disabled={pending || queued}
@@ -939,19 +777,12 @@ function Composer({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.08] text-foreground/75 transition-all hover:bg-black/10 dark:hover:bg-white/15 hover:text-foreground active:scale-95"
-                onClick={toggleListening}
-                aria-label="Click to speak (speech to text)"
-                title="Click to speak (speech to text)"
-              >
-                <Mic className="size-4" strokeWidth={2} />
-              </button>
+              <DictationControl listening={isListening} stream={dict.stream} onToggle={toggleListening} />
             )}
           </div>
         </div>
       )}
+      <DictationError message={dict.error} />
     </div>
   );
 }

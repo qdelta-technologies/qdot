@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUp, Crown, Hash, Trash2 } from "lucide-react";
 import { deleteChannel, sendChannelMessage } from "@/app/actions";
 import { useStore } from "@/lib/store";
+import { useDraft } from "@/lib/drafts";
 import DotOrb from "./DotOrb";
 import { ThinkingOrb } from "thinking-orbs";
 import { MessageRow } from "./Chat";
@@ -18,7 +19,8 @@ export default function ChannelView({ channelId }: { channelId: string }) {
   const dots = useStore((s) => s.dots);
   const all = useStore((s) => s.messages);
   const messages = useMemo(() => all.filter((m) => m.channelId === channelId), [all, channelId]);
-  const [text, setText] = useState("");
+  // Kept per channel, so leaving and coming back does not lose what you typed.
+  const [text, setText] = useDraft(`channel:${channelId}`);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, start] = useTransition();
 

@@ -1,11 +1,9 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- the Web Speech API has no TypeScript types */
-
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUp, ArrowUpRight, Folder, Mic, Plus, Square } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Folder, Plus } from "lucide-react";
 import { resolveCard, startConversation } from "@/app/actions";
 import { markRead, useStore } from "@/lib/store";
 import { DEFAULT_LOOK } from "@/lib/look";
@@ -14,6 +12,9 @@ import { groupByOwner } from "@/lib/dots";
 import { setHomeDot, useHomeDot, useMe } from "@/lib/me";
 import Dot3DLazy from "./Dot3DLazy";
 import DotOrb from "./DotOrb";
+import { DictationControl, DictationError } from "./DictationControl";
+import { useDictation } from "@/lib/useDictation";
+import { useDraft } from "@/lib/drafts";
 
 export default function Home() {
   const router = useRouter();
@@ -26,64 +27,20 @@ export default function Home() {
   const sortedDots = useMemo(() => groups.flatMap((g) => g.dots), [groups]);
   const picked = useHomeDot();
   const setPicked = setHomeDot;
-  const [text, setText] = useState("");
+  // Kept, so leaving this page and coming back does not lose what you typed.
+  const [text, setText] = useDraft("home");
   const [pending, start] = useTransition();
   const [confirmAll, setConfirmAll] = useState(false);
   // Set the moment a task is sent: holding Enter fires many key events before React re-renders, so state alone can't stop the repeats.
   const sending = useRef(false);
 
-  // Dictation with the browser's own speech recognition, same as the chat box.
-  const [listening, setListening] = useState(false);
-  const recRef = useRef<any>(null);
-  const baseRef = useRef("");
-  const stoppedRef = useRef(true);
-  useEffect(() => () => { try { recRef.current?.abort(); } catch {} }, []);
+  // Dictation: the same engine as the chat box (Ctrl+D starts and stops it).
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const dict = useDictation(text, setText);
+  const listening = dict.listening;
   const dictate = () => {
-    if (listening) {
-      stoppedRef.current = true;
-      try { recRef.current?.stop(); } catch {}
-      setListening(false);
-      return;
-    }
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      alert("Speech recognition is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Safari.");
-      return;
-    }
-    stoppedRef.current = false;
-    baseRef.current = text;
-    const begin = () => {
-      const rec = new SR();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = navigator.language || "en-US";
-      rec.onstart = () => setListening(true);
-      rec.onresult = (event: any) => {
-        let said = "";
-        for (let i = 0; i < event.results.length; ++i) said += event.results[i][0].transcript;
-        said = said.trim();
-        if (said) setText((baseRef.current.trim() ? baseRef.current.trim() + " " : "") + said);
-      };
-      rec.onerror = (event: any) => {
-        if (["not-allowed", "service-not-allowed", "audio-capture", "network"].includes(event.error)) {
-          alert(event.error === "network" ? "Voice typing needs an internet connection. Please try again." : "Could not use the microphone. Please allow microphone access in your browser.");
-          stoppedRef.current = true;
-          setListening(false);
-        }
-      };
-      rec.onend = () => {
-        if (stoppedRef.current) return setListening(false);
-        // The browser stops after a pause: keep what was said and carry on listening
-        setTimeout(() => {
-          if (stoppedRef.current) return;
-          setText((t) => ((baseRef.current = t), t));
-          begin();
-        }, 200);
-      };
-      recRef.current = rec;
-      try { rec.start(); } catch { setListening(false); }
-    };
-    begin();
+    dict.toggle();
+    taRef.current?.focus();
   };
 
   const latest = useMemo(
@@ -118,6 +75,7 @@ export default function Home() {
   const submit = () => {
     const value = text.trim();
     if (!value || !target || sending.current) return;
+    dict.abort();
     sending.current = true;
     start(async () => {
       try {
@@ -147,10 +105,14 @@ export default function Home() {
           <div className="mt-8 w-full max-w-[640px] text-left">
             <div className="rounded-2xl border border-black/10 bg-card/95 p-3 pl-5 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.15)] transition-shadow focus-within:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.2)]">
               <textarea
+                ref={taRef}
                 autoFocus
                 rows={2}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  dict.noteEdit();
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
@@ -158,7 +120,7 @@ export default function Home() {
                   }
                 }}
                 placeholder={target ? `Ask ${target.name} to research, browse, plan, or build something…` : "Loading…"}
-                className="max-h-60 min-h-[72px] w-full resize-none bg-transparent py-1.5 text-[17px] leading-[1.45] tracking-default outline-none [field-sizing:content] placeholder:text-foreground/35"
+                className={`max-h-60 min-h-[72px] w-full resize-none bg-transparent py-1.5 text-[17px] leading-[1.45] tracking-default outline-none [field-sizing:content] placeholder:text-foreground/35 ${listening ? "italic text-foreground/60" : ""}`}
               />
               <div className="flex items-center gap-2 pt-1">
                 <div className="flex flex-1 flex-wrap gap-1.5">
@@ -174,15 +136,7 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={dictate}
-                  aria-label={listening ? "Stop dictating" : "Dictate"}
-                  title={listening ? "Stop" : "Speak instead of typing"}
-                  className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors ${listening ? "bg-destructive/15 text-destructive" : "text-foreground/55 hover:bg-black/[0.05] hover:text-foreground"}`}
-                >
-                  {listening ? <Square className="size-3.5 fill-current" strokeWidth={2} /> : <Mic className="size-[18px]" strokeWidth={1.75} />}
-                </button>
+                <DictationControl listening={listening} stream={dict.stream} onToggle={dictate} size="lg" />
                 <button
                   className="flex size-10 shrink-0 items-center justify-center rounded-full bg-foreground text-card transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-25"
                   disabled={pending || !text.trim()}
@@ -193,6 +147,7 @@ export default function Home() {
                 </button>
               </div>
             </div>
+            <DictationError message={dict.error} />
           </div>
         </section>
 
