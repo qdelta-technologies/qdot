@@ -90,10 +90,27 @@ async function ensureChrome(sb: Sandbox) {
   throw new Error("Chrome didn't start on the dot's computer.");
 }
 
+/**
+ * Resume a dot's saved computer. One that is still being paused answers "409 ... is being paused" for a few
+ * seconds, so wait and try again. Only a computer that no longer exists (null) may be replaced: replacing it
+ * for any other error would throw away the dot's logins and open pages.
+ */
+async function reconnect(saved: string): Promise<Sandbox | null> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await Sandbox.connect(saved);
+    } catch (err) {
+      if (err instanceof Error && (err.name === "SandboxNotFoundError" || err.name === "NotFoundError")) return null;
+      if (attempt >= 9) throw err;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+}
+
 async function open(dotId: string): Promise<Box> {
   const saved = repo.getBoxId(dotId);
   let sb: Sandbox | null = null;
-  if (saved) sb = await Sandbox.connect(saved).catch(() => null); // resumes a paused box
+  if (saved) sb = await reconnect(saved); // resumes a paused box
   if (!sb) {
     sb = await Sandbox.create({
       resolution: [CLOUD_SCREEN.width, CLOUD_SCREEN.height],
@@ -121,7 +138,13 @@ export async function box(dotId: string): Promise<Box> {
   // Keep it awake while in use (at most one keep-alive call every 30s).
   if (Date.now() - ready.touchedAt > 30_000) {
     ready.touchedAt = Date.now();
-    await ready.sb.setTimeout(IDLE_MS).catch(() => boxes.delete(dotId));
+    const alive = await ready.sb.setTimeout(IDLE_MS).then(() => true, () => false);
+    if (!alive) {
+      // E2B paused it after the idle time, so this connection is stale: reconnect now (resumes the same computer)
+      // instead of failing this request and only fixing the next one.
+      if (boxes.get(dotId) === b) boxes.delete(dotId);
+      return box(dotId);
+    }
   }
   return ready;
 }
