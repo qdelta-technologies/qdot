@@ -67,8 +67,13 @@ export async function saveCloudKey(key: string): Promise<string | null> {
 }
 
 type Box = { sb: Sandbox; streaming: boolean; lastShot: Buffer | null; touchedAt: number };
-const g = globalThis as unknown as { __dotsBoxes?: Map<string, Promise<Box>> };
+const g = globalThis as unknown as { __dotsBoxes?: Map<string, Promise<Box>>; __dotsPausing?: Map<string, Promise<void>> };
 const boxes = (g.__dotsBoxes ??= new Map());
+// Computers that are being put to sleep right now. Resuming one mid-pause "works" for a moment and then dies
+// ("Sandbox is probably not running anymore"), so opening waits for the pause to finish first.
+const pausing = (g.__dotsPausing ??= new Map());
+// What E2B says when a connection points at a computer that was paused or is being paused.
+const STALE = /not running anymore|is being paused|paused|not found/i;
 
 async function setup(sb: Sandbox) {
   await sb.commands.run(`mkdir -p ${WORKSPACE} /home/user/.dots`);
@@ -108,22 +113,31 @@ async function reconnect(saved: string): Promise<Sandbox | null> {
 }
 
 async function open(dotId: string): Promise<Box> {
-  const saved = repo.getBoxId(dotId);
-  let sb: Sandbox | null = null;
-  if (saved) sb = await reconnect(saved); // resumes a paused box
-  if (!sb) {
-    sb = await Sandbox.create({
-      resolution: [CLOUD_SCREEN.width, CLOUD_SCREEN.height],
-      dpi: 96,
-      timeoutMs: IDLE_MS,
-      lifecycle: { onTimeout: "pause" },
-      metadata: { app: "dots", dot: dotId },
-    });
-    repo.setBoxId(dotId, sb.sandboxId);
+  await pausing.get(dotId)?.catch(() => {});
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const saved = repo.getBoxId(dotId);
+      let sb: Sandbox | null = null;
+      if (saved) sb = await reconnect(saved); // resumes a paused box
+      if (!sb) {
+        sb = await Sandbox.create({
+          resolution: [CLOUD_SCREEN.width, CLOUD_SCREEN.height],
+          dpi: 96,
+          timeoutMs: IDLE_MS,
+          lifecycle: { onTimeout: "pause" },
+          metadata: { app: "dots", dot: dotId },
+        });
+        repo.setBoxId(dotId, sb.sandboxId);
+      }
+      await sb.setTimeout(IDLE_MS);
+      await setup(sb);
+      return { sb, streaming: false, lastShot: null, touchedAt: Date.now() };
+    } catch (err) {
+      // It was paused again while we resumed it: reconnect (the same computer) instead of failing.
+      if (attempt >= 3 || !STALE.test(String(err))) throw err;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
   }
-  await sb.setTimeout(IDLE_MS);
-  await setup(sb);
-  return { sb, streaming: false, lastShot: null, touchedAt: Date.now() };
 }
 
 /** The dot's cloud computer, created or resumed as needed. */
@@ -317,6 +331,17 @@ export async function doAction(dotId: string, action: ComputerAction): Promise<v
 
 /** A noVNC URL for the dot's desktop: view-only for watching, interactive for taking over. */
 export async function liveUrl(dotId: string, interactive: boolean): Promise<string> {
+  try {
+    return await liveUrlOnce(dotId, interactive);
+  } catch (err) {
+    if (!STALE.test(String(err))) throw err;
+    boxes.delete(dotId); // the connection was stale: reconnect once and try again
+    await new Promise((r) => setTimeout(r, 1500));
+    return liveUrlOnce(dotId, interactive);
+  }
+}
+
+async function liveUrlOnce(dotId: string, interactive: boolean): Promise<string> {
   const b = await box(dotId);
   if (!b.streaming) {
     await b.sb.stream.start({ requireAuth: true }).catch(async (err: unknown) => {
@@ -338,8 +363,16 @@ export async function sleep(dotId: string) {
   const b = boxes.get(dotId);
   boxes.delete(dotId);
   const id = repo.getBoxId(dotId);
-  if (b) await (await b.catch(() => null))?.sb.pause().catch(() => {});
-  else if (id) await Sandbox.pause(id).catch(() => {});
+  const done = (async () => {
+    if (b) await (await b.catch(() => null))?.sb.pause().catch(() => {});
+    else if (id) await Sandbox.pause(id).catch(() => {});
+  })();
+  pausing.set(dotId, done);
+  try {
+    await done;
+  } finally {
+    if (pausing.get(dotId) === done) pausing.delete(dotId);
+  }
 }
 
 /** Throw the box away (fresh computer next time, or the dot was deleted). */
