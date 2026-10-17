@@ -188,8 +188,10 @@ export async function finishSignIn(code: string) {
 export async function signOut() {
   await st.client?.close().catch(() => {});
   st.client = null;
+  st.pending = null;
   st.tools = [];
   st.connected = [];
+  metaSession = null; // the session id belongs to the account that just signed out
   setSetting("composio_oauth", null);
   publish();
 }
@@ -275,6 +277,9 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
       } catch {}
     }
   }
+
+  // Big results must come back in the reply: a workbench file lives on Composio's machine, which the dot's own computer cannot read.
+  if (name === "COMPOSIO_MULTI_EXECUTE_TOOL") normalizedArgs.sync_response_to_workbench = false;
 
   const run = async () => {
     const client = await ensureClient();

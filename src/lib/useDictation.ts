@@ -39,6 +39,13 @@ const joinText = (base: string, said: string) => {
 
 export const DICTATION_SHORTCUT = "Ctrl+D";
 
+/** Console log for finding mic problems: run localStorage.setItem("qdot-dictation-debug", "1") in the browser console, then reload. */
+const dlog = (what: string, data?: unknown) => {
+  try {
+    if (localStorage.getItem("qdot-dictation-debug")) console.log("[dictation]", what, data ?? "");
+  } catch {}
+};
+
 export function useDictation(text: string, setText: (v: string) => void) {
   const [listening, setListening] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -63,7 +70,10 @@ export function useDictation(text: string, setText: (v: string) => void) {
     netRetries: 0,
     timer: 0 as ReturnType<typeof setTimeout> | 0,
     stream: null as MediaStream | null,
+    startText: "", // the box before dictation began, restored by cancel()
+    finishers: [] as (() => void)[], // finish() calls waiting for the recognizer's last words
   });
+  const [heard, setHeard] = useState(false); // at least one word has come back this time
 
   const releaseStream = useCallback(() => {
     s.current.stream?.getTracks().forEach((t) => t.stop());
@@ -100,21 +110,28 @@ export function useDictation(text: string, setText: (v: string) => void) {
     st.committed = "";
     st.processed = 0;
     st.startedAt = Date.now();
+    dlog("begin", { base: st.base.length });
 
     rec.onresult = (e: any) => {
       if (st.rec !== rec) return;
       st.netRetries = 0;
+      // Rebuild from the whole result list every time. Counting results as they arrive breaks when the browser
+      // renumbers or re-finalizes an earlier result (Edge does), and the words then vanish from the box.
+      let finals = "";
       let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) {
-          if (i >= st.processed) {
-            st.committed = joinText(st.committed, r[0].transcript);
-            st.processed = i + 1;
-          }
-        } else interim += r[0].transcript;
+        if (r.isFinal) finals = joinText(finals, r[0].transcript);
+        else interim += r[0].transcript;
       }
-      setTextRef.current(joinText(joinText(st.base, st.committed), interim));
+      st.committed = finals;
+      if (finals || interim) setHeard(true);
+      // `base` is what was in the box when this session began, so the box can never end up shorter than it.
+      const next = joinText(joinText(st.base, finals), interim);
+      dlog("result", { base: st.base.length, finals: finals.length, interim: interim.length, results: e.results.length });
+      // Update the ref now, not after the next render: a restart in between must start from what is on screen.
+      valueRef.current = next;
+      setTextRef.current(next);
     };
 
     rec.onerror = (e: any) => {
@@ -137,6 +154,7 @@ export function useDictation(text: string, setText: (v: string) => void) {
         st.rec = null;
         setListening(false);
         releaseStream();
+        st.finishers.splice(0).forEach((f) => f()); // the last words have arrived
         return;
       }
       // The browser ended the session (a pause, or a time limit). Carry on, unless it keeps ending at once.
@@ -172,6 +190,8 @@ export function useDictation(text: string, setText: (v: string) => void) {
       return;
     }
     setError(null);
+    setHeard(false);
+    st.startText = valueRef.current;
     st.wanted = true;
     st.quickEnds = 0;
     st.netRetries = 0;
@@ -197,19 +217,60 @@ export function useDictation(text: string, setText: (v: string) => void) {
     if (st.wanted) begin();
   }, [begin, fail]);
 
-  /** Stop; words already spoken are still delivered and added. */
-  const stop = useCallback(() => {
+  /**
+   * Stop, and wait until the recognizer has handed over the words still on their way (up to 2.5 s).
+   * Resolves with the full text of the box, so a message sent right after is complete.
+   */
+  const finish = useCallback((): Promise<string> => {
     const st = s.current;
     st.wanted = false;
     if (st.timer) clearTimeout(st.timer);
     st.timer = 0;
     setListening(false);
-    if (st.rec) {
-      try { st.rec.stop(); } catch {}
-      setTimeout(releaseStream, 2500); // onend releases it earlier, once the last words arrived
-    } else {
+    const rec = st.rec;
+    if (!rec) {
       releaseStream();
+      return Promise.resolve(valueRef.current);
     }
+    return new Promise((resolve) => {
+      let done = false;
+      const end = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(giveUp);
+        resolve(valueRef.current);
+      };
+      const giveUp = setTimeout(() => {
+        // onend never came: take what is there and let go of the microphone
+        if (st.rec === rec) st.rec = null;
+        try { rec.abort(); } catch {}
+        releaseStream();
+        end();
+      }, 2500);
+      st.finishers.push(end);
+      try { rec.stop(); } catch { end(); }
+    });
+  }, [releaseStream]);
+
+  /** Stop; words already spoken are still delivered and added. */
+  const stop = useCallback(() => {
+    void finish();
+  }, [finish]);
+
+  /** Throw away what was dictated this time: the box goes back to what it held when the mic was switched on. */
+  const cancel = useCallback(() => {
+    const st = s.current;
+    st.wanted = false;
+    if (st.timer) clearTimeout(st.timer);
+    st.timer = 0;
+    const rec = st.rec;
+    st.rec = null;
+    try { rec?.abort(); } catch {}
+    setListening(false);
+    releaseStream();
+    st.finishers.splice(0).forEach((f) => f());
+    valueRef.current = st.startText;
+    setTextRef.current(st.startText);
   }, [releaseStream]);
 
   /** Stop at once and ignore anything still on its way (used when the message is sent). */
@@ -282,5 +343,5 @@ export function useDictation(text: string, setText: (v: string) => void) {
     [],
   );
 
-  return { listening, stream, error, toggle, stop, abort, noteEdit, clearError: () => setError(null) };
+  return { listening, stream, error, heard, toggle, stop, finish, cancel, abort, noteEdit, report: setError, clearError: () => setError(null) };
 }

@@ -488,6 +488,22 @@ export async function deleteTrigger(triggerId: string) {
   await triggers.removeTrigger(triggerId).catch(() => {});
 }
 
+/** Settings → Automations: remove every routine and every app trigger of every dot, after the user confirms in the page. */
+export async function deleteAllAutomations(): Promise<{ routines: number; triggers: number }> {
+  const routines = repo.listRoutines();
+  for (const r of routines) await deleteRoutine(r.id);
+  let removedTriggers = 0;
+  for (const t of repo.listTriggers()) {
+    try {
+      await triggers.removeTrigger(t.id);
+      removedTriggers++;
+    } catch {
+      // Composio unreachable or no developer key: leave that trigger in place
+    }
+  }
+  return { routines: routines.length, triggers: removedTriggers };
+}
+
 /** Paste an E2B key in Settings for cloud computers (empty removes it). */
 export async function setCloudKey(key: string): Promise<string | null> {
   const err = await computer.saveCloudKey(key.trim());
@@ -527,6 +543,7 @@ export async function signInComposio(): Promise<{ url?: string; error?: string }
 
 export async function signOutComposio() {
   await composio.signOut();
+  repo.forgetOldAccountData();
   emit({ type: "computer", data: computerInfo() });
 }
 

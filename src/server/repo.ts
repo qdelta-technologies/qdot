@@ -470,6 +470,17 @@ export function setAppAccount(dotId: string, toolkit: string, account: string | 
   setSetting(`${toolkit.toLowerCase()}_account:${dotId}`, account?.trim() || null);
 }
 
+/** The connected apps changed owner (Composio signed out): every dot's saved account choice and every remembered Drive/Sheets id points at the old account. */
+export function forgetOldAccountData(): { pins: number; memories: number } {
+  const pins = Number(db().prepare("DELETE FROM settings WHERE key LIKE '%\\_account:%' ESCAPE '\\'").run().changes);
+  const looksLikeGoogleId = /\b(?=[\w-]*\d)(?=[\w-]*[A-Za-z])[\w-]{30,}\b/;
+  const mentionsFile = /sheet|spreadsheet|drive|folder|google doc|docs\.google/i;
+  const stale = listMemories().filter((m) => looksLikeGoogleId.test(m.text) && mentionsFile.test(m.text));
+  stale.forEach((m) => deleteMemory(m.id));
+  db().prepare("DELETE FROM settings WHERE key LIKE 'drive\\_%folder%' ESCAPE '\\' OR key = 'drive_logs_root'").run();
+  return { pins, memories: stale.length };
+}
+
 // ---------- rules ----------
 
 const toRule = (r: Row): Rule => ({

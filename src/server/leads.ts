@@ -220,7 +220,7 @@ export function fillTemplate(text: string, lead: Pick<Lead, "name" | "company">)
 
 // ---------------- LinkedIn pacing ----------------
 
-const DEFAULT_DAILY_PAGES = 40;
+const DEFAULT_DAILY_PAGES = 80;
 const MIN_GAP_MS = 15_000;
 const lastOpen = new Map<string, number>();
 const dayKey = (dotId: string) => `linkedin_pages:${new Date().toISOString().slice(0, 10)}:${dotId}`;
@@ -228,8 +228,10 @@ const dayKey = (dotId: string) => `linkedin_pages:${new Date().toISOString().sli
 export const isLinkedIn = (url: string) => /(^|\/\/|\.)linkedin\.com/i.test(url);
 
 /** A LinkedIn page that is asking for a security check, or that says activity looks unusual. */
+// Only LinkedIn's own check pages and wording count. Bare words like "challenge", "captcha" or "restricted" also appear in
+// ordinary profiles and posts ("I love a challenge"), and a false match pauses all LinkedIn work.
 export const looksLikeLinkedInCheck = (text: string) =>
-  /checkpoint|captcha|challenge|security verification|unusual activity|let's do a quick security check|verify you're a human|restricted/i.test(text);
+  /linkedin\.com\/(checkpoint|challenge)\b|let['’]s do a quick security check|security verification|verify you['’]re a human|unusual activity|we['’]ve restricted your account|your account has been restricted/i.test(text);
 
 /** LinkedIn's plain "please sign in" pages. They are not a security check: the browser just is not signed in yet. */
 export const isLinkedInSignInPage = (url: string) => /linkedin\.com\/(authwall|login|uas\/login)/i.test(url);
@@ -243,6 +245,11 @@ export function linkedInPaused(): string | null {
   if (!reason) return null;
   const at = Date.parse(reason.split(" ")[0]);
   if (Number.isFinite(at) && at < FALSE_PAUSES_BEFORE) {
+    setSetting("linkedin_paused", null);
+    return null;
+  }
+  // A pause nobody cleared lifts itself after two hours, so one false alarm cannot block LinkedIn for good.
+  if (Number.isFinite(at) && Date.now() - at > 2 * 60 * 60_000) {
     setSetting("linkedin_paused", null);
     return null;
   }

@@ -12,7 +12,7 @@ import { groupByOwner } from "@/lib/dots";
 import { setHomeDot, useHomeDot, useMe } from "@/lib/me";
 import Dot3DLazy from "./Dot3DLazy";
 import DotOrb from "./DotOrb";
-import { DictationControl, DictationError } from "./DictationControl";
+import { DictationBar, DictationControl, DictationError } from "./DictationControl";
 import { useDictation } from "@/lib/useDictation";
 import { useDraft } from "@/lib/drafts";
 
@@ -72,10 +72,20 @@ export default function Home() {
   const target = dots.find((d) => d.id === picked) ?? sortedDots[0] ?? dots[0];
   const waitingCards = latest.filter((m) => m.role === "card" && m.card?.status === "pending");
 
-  const submit = () => {
-    const value = text.trim();
-    if (!value || !target || sending.current) return;
-    dict.abort();
+  const submit = async () => {
+    if (!target || sending.current) return;
+    let value = text.trim();
+    if (listening) {
+      // Let the recognizer hand over the words still on their way, then send everything that was said.
+      sending.current = true;
+      value = (await dict.finish()).trim();
+      sending.current = false;
+      if (!value) {
+        dict.report("I didn't catch anything, so nothing was sent. Check your microphone and try again.");
+        return;
+      }
+    }
+    if (!value) return;
     sending.current = true;
     start(async () => {
       try {
@@ -104,6 +114,9 @@ export default function Home() {
 
           <div className="mt-8 w-full max-w-[640px] text-left">
             <div className="rounded-2xl border border-black/10 bg-card/95 p-3 pl-5 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.15)] transition-shadow focus-within:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.2)]">
+              {listening && (
+                <DictationBar stream={dict.stream} heard={dict.heard} preview={text} onCancel={dict.cancel} onDone={dict.stop} onSend={() => void submit()} />
+              )}
               <textarea
                 ref={taRef}
                 autoFocus
@@ -120,9 +133,9 @@ export default function Home() {
                   }
                 }}
                 placeholder={target ? `Ask ${target.name} to research, browse, plan, or build something…` : "Loading…"}
-                className={`max-h-60 min-h-[72px] w-full resize-none bg-transparent py-1.5 text-[17px] leading-[1.45] tracking-default outline-none [field-sizing:content] placeholder:text-foreground/35 ${listening ? "italic text-foreground/60" : ""}`}
+                className={`max-h-60 min-h-[72px] w-full resize-none bg-transparent py-1.5 text-[17px] leading-[1.45] tracking-default outline-none [field-sizing:content] placeholder:text-foreground/35 ${listening ? "hidden" : ""}`}
               />
-              <div className="flex items-center gap-2 pt-1">
+              <div className={`flex items-center gap-2 pt-1 ${listening ? "hidden" : ""}`}>
                 <div className="flex flex-1 flex-wrap gap-1.5">
                   {sortedDots.map((d) => (
                     <button

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ExternalLink, RefreshCw } from "lucide-react";
-import { getAutomations } from "@/app/actions";
+import { deleteAllAutomations, getAutomations } from "@/app/actions";
 
 type Data = Awaited<ReturnType<typeof getAutomations>>;
 
@@ -57,6 +57,22 @@ export default function AutomationsSection() {
   const [data, setData] = useState<Data | null>(null);
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState(RECORD_PAGE);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleted, setDeleted] = useState<string | null>(null);
+
+  const deleteAll = async () => {
+    setDeleting(true);
+    try {
+      const r = await deleteAllAutomations();
+      setDeleted(`Deleted ${r.routines} routine${r.routines === 1 ? "" : "s"} and ${r.triggers} trigger${r.triggers === 1 ? "" : "s"}.`);
+    } catch {
+      setDeleted("Couldn't delete everything. Try again.");
+    }
+    setConfirming(false);
+    setDeleting(false);
+    load();
+  };
 
   const load = useCallback(() => {
     setBusy(true);
@@ -88,7 +104,25 @@ export default function AutomationsSection() {
         <button type="button" className="btn-secondary inline-flex items-center gap-1.5" onClick={load} disabled={busy}>
           <RefreshCw className={`size-3.5 ${busy ? "animate-spin" : ""}`} strokeWidth={1.75} /> Refresh
         </button>
+        {data.routines.length > 0 && !confirming && (
+          <button type="button" className="btn-secondary inline-flex items-center gap-1.5 text-destructive" onClick={() => setConfirming(true)}>
+            Delete all
+          </button>
+        )}
       </div>
+
+      {confirming && (
+        <div className="surface flex flex-wrap items-center gap-2 border border-destructive/30 px-4 py-3">
+          <span className="min-w-0 flex-1 text-body-sm">Delete every routine and every app trigger, for all dots? This can&apos;t be undone.</span>
+          <button type="button" className="btn-secondary" disabled={deleting} onClick={() => setConfirming(false)}>
+            Cancel
+          </button>
+          <button type="button" className="btn-secondary text-destructive" disabled={deleting} onClick={deleteAll}>
+            {deleting ? "Deleting…" : "Yes, delete all"}
+          </button>
+        </div>
+      )}
+      {deleted && <div className="text-caption text-foreground/60">{deleted}</div>}
 
       <Fold id="routines" title="Routines" count={data.routines.length} hint={next ? `Next: ${next.name}, ${fmt(next.nextRunAt)}` : "Nothing scheduled right now"}>
         <div className="surface divide-y divide-black/[0.06]">

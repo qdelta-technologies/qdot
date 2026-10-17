@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Mic } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowUp, Mic, Square, X } from "lucide-react";
 import { DICTATION_SHORTCUT } from "@/lib/useDictation";
 
 const BARS = 4;
@@ -69,6 +69,133 @@ export function DictationBars({ stream }: { stream: MediaStream | null }) {
         <span key={i} ref={(el) => void (bars.current[i] = el)} className="w-[3px] rounded-full bg-brand transition-[height] duration-75" style={{ height: 4 }} />
       ))}
     </span>
+  );
+}
+
+const WAVE = 56; // how many bars the scrolling wave holds
+
+/**
+ * The recording bar shown while the mic is on: cancel, a wave that scrolls left as you speak, done, send.
+ * Enter sends and Escape cancels, so the keyboard works even though the text box is hidden meanwhile.
+ */
+export function DictationBar({
+  stream,
+  heard,
+  preview,
+  onCancel,
+  onDone,
+  onSend,
+}: {
+  stream: MediaStream | null;
+  heard: boolean;
+  preview: string;
+  onCancel: () => void;
+  onDone: () => void;
+  onSend: () => void;
+}) {
+  const bars = useRef<(HTMLSpanElement | null)[]>([]);
+  const [silent, setSilent] = useState(false);
+  const handlers = useRef({ onCancel, onSend });
+  useEffect(() => {
+    handlers.current = { onCancel, onSend };
+  });
+
+  // No words after 5 seconds: say so, so a dead microphone is noticed before the message is sent.
+  useEffect(() => {
+    if (heard) {
+      setSilent(false);
+      return;
+    }
+    const t = setTimeout(() => setSilent(true), 5000);
+    return () => clearTimeout(t);
+  }, [heard]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        if (!e.repeat) handlers.current.onSend();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        handlers.current.onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    const levels = new Array<number>(WAVE).fill(0);
+    const paint = () => {
+      levels.forEach((lv, i) => {
+        const el = bars.current[i];
+        if (!el) return;
+        el.style.height = `${3 + Math.round(Math.min(1, lv) * 26)}px`;
+        el.style.opacity = lv > 0.04 ? "0.85" : "0.3";
+      });
+    };
+    let ctx: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    const data = new Uint8Array(512);
+    if (stream) {
+      try {
+        const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        ctx = new AC();
+        void ctx.resume();
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        ctx.createMediaStreamSource(stream).connect(analyser);
+      } catch {
+        analyser = null;
+      }
+    }
+    const timer = setInterval(() => {
+      let level = 0;
+      if (analyser) {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        level = Math.min(1, Math.sqrt(sum / data.length) * 5); // loudness of the last moment
+      }
+      levels.push(level);
+      levels.shift();
+      paint();
+    }, 55);
+    paint();
+    return () => {
+      clearInterval(timer);
+      if (ctx && ctx.state !== "closed") void ctx.close().catch(() => {});
+    };
+  }, [stream]);
+
+  const round = "flex size-9 shrink-0 items-center justify-center rounded-full transition-all active:scale-95";
+  return (
+    <div className="flex w-full flex-col gap-1.5 py-0.5">
+      {(preview || silent) && (
+        <p className={`truncate px-3 text-[12.5px] ${heard ? "text-foreground/55" : "text-warning"}`}>
+          {heard ? `…${preview.slice(-90)}` : "I can't hear anything yet. Check that the right microphone is on."}
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <button type="button" aria-label="Cancel dictation" title="Cancel (Esc)" onMouseDown={(e) => e.preventDefault()} onClick={onCancel} className={`${round} border border-black/10 text-foreground/70 hover:text-foreground dark:border-white/15`}>
+          <X className="size-4" strokeWidth={2} />
+        </button>
+        <div aria-hidden className="flex h-9 min-w-0 flex-1 items-center justify-end gap-[3px] overflow-hidden">
+          {Array.from({ length: WAVE }, (_, i) => (
+            <span key={i} ref={(el) => void (bars.current[i] = el)} className="w-[3px] shrink-0 rounded-full bg-foreground" style={{ height: 3, opacity: 0.3 }} />
+          ))}
+        </div>
+        <button type="button" aria-label="Done dictating" title={`Done (${DICTATION_SHORTCUT})`} onMouseDown={(e) => e.preventDefault()} onClick={onDone} className={`${round} bg-black/[0.07] text-foreground hover:bg-black/15 dark:bg-white/[0.12]`}>
+          <Square className="size-3.5 fill-current" />
+        </button>
+        <button type="button" aria-label="Done and send" title="Send (Enter)" onMouseDown={(e) => e.preventDefault()} onClick={onSend} className={`${round} bg-brand text-white hover:bg-brand-hover`}>
+          <ArrowUp className="size-[18px]" strokeWidth={2.25} />
+        </button>
+      </div>
+    </div>
   );
 }
 

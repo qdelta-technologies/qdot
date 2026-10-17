@@ -60,7 +60,7 @@ import { ThinkingOrb, type OrbState } from "thinking-orbs";
 import { compressImageIfLarge } from "@/lib/imageCompression";
 import { useDesktopSidebarOpen } from "@/lib/ui";
 import { StreamingMarkdown } from "./StreamingMarkdown";
-import { DictationControl, DictationError } from "./DictationControl";
+import { DictationBar, DictationControl, DictationError } from "./DictationControl";
 import { useDictation } from "@/lib/useDictation";
 import { useDraft } from "@/lib/drafts";
 import type { Attachment, Dot, Message } from "@/lib/types";
@@ -501,9 +501,20 @@ function Composer({
     });
   };
 
-  const submit = () => {
-    if (isListening) dict.abort(); // late words must not refill the box after it is cleared
-    const value = text.trim();
+  const finishing = useRef(false);
+  const submit = async () => {
+    if (finishing.current) return;
+    let value = text.trim();
+    if (isListening) {
+      // Let the recognizer hand over the words still on their way, then send everything that was said.
+      finishing.current = true;
+      value = (await dict.finish()).trim();
+      finishing.current = false;
+      if (!value && !ready.length && !busy) {
+        dict.report("I didn't catch anything, so nothing was sent. Check your microphone and try again.");
+        return;
+      }
+    }
     if (!value && !ready.length && !busy) return;
     if (busy) {
       // a file is still uploading: send as soon as it finishes
@@ -636,7 +647,10 @@ function Composer({
           }`}
         >
 
-          <div className="flex items-end gap-2">
+          {isListening && (
+            <DictationBar stream={dict.stream} heard={dict.heard} preview={text} onCancel={dict.cancel} onDone={dict.stop} onSend={() => void submit()} />
+          )}
+          <div className={`flex items-end gap-2 ${isListening ? "hidden" : ""}`}>
             {/* Plus / Attach button */}
             <div ref={attachRef} className="relative shrink-0">
               <button

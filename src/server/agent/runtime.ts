@@ -507,6 +507,7 @@ async function respond(dot: Dot, prevId: string | null, input: ResponseInputItem
     : [null];
 
   let lastErr: unknown = null;
+  let droppedStreams = 0;
 
   for (let workerIdx = 0; workerIdx < candidateWorkers.length; workerIdx++) {
     const workerUrl = candidateWorkers[workerIdx];
@@ -681,6 +682,16 @@ async function respond(dot: Dot, prevId: string | null, input: ResponseInputItem
     if (final) {
       if (stateless) repo.setHistory(dot.id, trimHistory([...history, ...input, ...replayable(final.output)]));
       return final;
+    }
+
+    // The stream ended with no completion and no error (the provider dropped the connection): ask again, up to twice.
+    // Whatever half-written text it showed is removed first, so the retry does not leave a duplicate message.
+    if (!streamFailed && !signal?.aborted && droppedStreams < 2) {
+      droppedStreams++;
+      console.warn(`[dots] Model stream ended without finishing (attempt ${droppedStreams}). Retrying...`);
+      for (const d of drafts.values()) repo.deleteMessage(d.id);
+      await new Promise((r) => setTimeout(r, 1000 * droppedStreams));
+      workerIdx--;
     }
   }
 
