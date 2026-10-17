@@ -52,13 +52,14 @@ import {
   setOpenRouterKey,
   signInComposio,
   signOutComposio,
+  updatePassword,
 } from "@/app/actions";
 import type { AppAccount } from "@/server/composio";
 import { useStore } from "@/lib/store";
 import { setMe, useMe } from "@/lib/me";
 import { useTheme } from "@/lib/theme";
 import { openAfter } from "@/lib/popup";
-import { Empty, PageHeader, RemoveButton, Section } from "./SettingsKit";
+import { Empty, EditButton, PageHeader, RemoveButton, Section } from "./SettingsKit";
 import ModelPicker from "./ModelPicker";
 import { TriggersKey } from "./Triggers";
 import StorageManager from "./StorageManager";
@@ -75,6 +76,7 @@ export default function SettingsView() {
   const permission = useSyncExternalStore(noop, notificationPermission, () => "default");
   const [, force] = useState(0);
   const [form, setForm] = useState({ site: "", username: "", password: "" });
+  const [editingId, setEditingId] = useState<string | null>(null); // a saved login being edited in the form below
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -174,7 +176,24 @@ export default function SettingsView() {
                     <span className="w-40 truncate text-[14px]">{p.site}</span>
                     <span className="min-w-0 flex-1 truncate text-body-sm text-foreground/55">{p.username}</span>
                     <span className="font-mono text-[12px] tracking-widest text-foreground/35">••••••••</span>
-                    <RemoveButton label="Delete password" onClick={() => start(() => deletePassword(p.id))} />
+                    <EditButton
+                      label="Edit login"
+                      onClick={() => {
+                        setEditingId(p.id);
+                        setForm({ site: p.site, username: p.username, password: "" });
+                        setError(null);
+                      }}
+                    />
+                    <RemoveButton
+                      label="Delete password"
+                      onClick={() => {
+                        if (editingId === p.id) {
+                          setEditingId(null);
+                          setForm({ site: "", username: "", password: "" });
+                        }
+                        start(() => deletePassword(p.id));
+                      }}
+                    />
                   </div>
                 ))}
               </div>
@@ -187,24 +206,40 @@ export default function SettingsView() {
               onSubmit={(e) => {
                 e.preventDefault();
                 start(async () => {
-                  const err = await savePassword(form.site, form.username, form.password);
+                  const err = editingId ? await updatePassword(editingId, form.site, form.username, form.password) : await savePassword(form.site, form.username, form.password);
                   setError(err);
-                  if (!err) setForm({ site: "", username: "", password: "" });
+                  if (!err) {
+                    setForm({ site: "", username: "", password: "" });
+                    setEditingId(null);
+                  }
                 });
               }}
             >
               <div className="grid gap-3 sm:grid-cols-3">
                 <input className="field" placeholder="Site, e.g. github.com" value={form.site} onChange={(e) => setForm({ ...form, site: e.target.value })} />
                 <input className="field" placeholder="Username or email" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-                <input className="field" type="password" placeholder="Password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+                <input className="field" type="password" placeholder={editingId ? "New password (leave empty to keep the current one)" : "Password"} autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
               </div>
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1.5 text-caption text-foreground/45">
-                  <Lock className="size-3" strokeWidth={2} /> AES-256-GCM encrypted
+                  <Lock className="size-3" strokeWidth={2} /> {editingId ? "Editing a saved login" : "AES-256-GCM encrypted"}
                 </span>
                 {error && <span className="text-caption text-destructive">{error}</span>}
-                <button className="btn-primary ml-auto h-8 px-3 text-[13px]" disabled={pending}>
-                  Save login
+                {editingId && (
+                  <button
+                    type="button"
+                    className="btn-secondary ml-auto h-8 px-3 text-[13px]"
+                    onClick={() => {
+                      setEditingId(null);
+                      setForm({ site: "", username: "", password: "" });
+                      setError(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button className={`btn-primary h-8 px-3 text-[13px] ${editingId ? "" : "ml-auto"}`} disabled={pending}>
+                  {editingId ? "Save changes" : "Save login"}
                 </button>
               </div>
             </form>

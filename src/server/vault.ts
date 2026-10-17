@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { DATA_DIR } from "./db";
-import { insertPassword, sealedPasswordFor } from "./repo";
+import { insertPassword, sealedPasswordFor, updatePassword } from "./repo";
 
 // Passwords are AES-256-GCM encrypted at rest. The master key lives in the macOS
 // Keychain when available, Windows DPAPI on Windows, VAULT_KEY env var on Linux/Railway,
@@ -159,6 +159,11 @@ export function unseal(sealed: string): string {
 
 export function savePassword(site: string, username: string, password: string) {
   return insertPassword(site.trim(), username.trim(), seal(password));
+}
+
+/** Edit a saved login. An empty password keeps the one already saved. */
+export function editPassword(passwordId: string, site: string, username: string, password: string) {
+  return updatePassword(passwordId, site.trim(), username.trim(), password ? seal(password) : null);
 }
 
 export function credentialFor(site: string): { site: string; username: string; password: string } | null {

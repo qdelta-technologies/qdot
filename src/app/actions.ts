@@ -3,7 +3,7 @@
 import * as repo from "@/server/repo";
 import * as runtime from "@/server/agent/runtime";
 import * as computer from "@/server/computer";
-import { savePassword as vaultSave } from "@/server/vault";
+import { editPassword as vaultEdit, savePassword as vaultSave } from "@/server/vault";
 import { getSetting, setSetting } from "@/server/db";
 import { DEFAULT_COMPANY, PROFILE_KEYS } from "@/server/agent/prompt";
 import { emit } from "@/server/bus";
@@ -269,6 +269,13 @@ export async function savePassword(site: string, username: string, password: str
   if (!site.trim() || !password) return "Site and password are required.";
   vaultSave(site, username, password);
   return null;
+}
+
+/** Edit a saved login. Leave the password empty to keep the current one. */
+export async function updatePassword(passwordId: string, site: string, username: string, password: string): Promise<string | null> {
+  if (!site.trim()) return "Site is required.";
+  const saved = vaultEdit(passwordId, site, username, password);
+  return saved ? null : "That login no longer exists.";
 }
 
 export async function deletePassword(passwordId: string) {

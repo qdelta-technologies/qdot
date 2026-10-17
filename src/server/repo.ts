@@ -739,6 +739,17 @@ export function insertPassword(site: string, username: string, sealed: string): 
   return entry;
 }
 
+/** Change a saved login's site and username, and its password only when a new sealed one is given. */
+export function updatePassword(pwId: string, site: string, username: string, sealed: string | null): PasswordEntry | null {
+  if (sealed) db().prepare("UPDATE passwords SET site = ?, username = ?, secret = ? WHERE id = ?").run(site, username, sealed, pwId);
+  else db().prepare("UPDATE passwords SET site = ?, username = ? WHERE id = ?").run(site, username, pwId);
+  const row = db().prepare("SELECT * FROM passwords WHERE id = ?").get(pwId);
+  if (!row) return null;
+  const entry = toPassword(row as Row);
+  emit({ type: "password", data: entry });
+  return entry;
+}
+
 export function sealedPasswordFor(site: string): { username: string; sealed: string; site: string } | null {
   const rows = db().prepare("SELECT site, username, secret FROM passwords").all() as Row[];
   const host = hostOf(site);
