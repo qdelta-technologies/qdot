@@ -310,7 +310,7 @@ async function withRun(dotId: string, fn: (signal: AbortSignal) => Promise<void>
       const friendlyMsg = isNeuronExhausted
         ? `⚡ Cloudflare daily free limit reached (10,000 neurons). Connect your second opendot-worker in Settings to double your capacity, or wait for daily reset at 00:00 UTC (5:30 AM IST).`
         : is429
-        ? `⚡ Rate limit or input token limit reached (e.g. Groq free tier 7k ITPM). Please switch to **Gemini 3.5 Flash Lite** (1,000,000 token context) or Cloudflare in the model dropdown.`
+        ? `⚡ The model provider refused the request (rate limit, token limit or a provider error). Say "continue" to try again, or switch to another model in the model dropdown. Provider said: ${msg.replace(/\s+/g, " ").slice(0, 240)}`
         : isModelDeprecated
         ? `⚠️ Google AI has retired older Gemini models for new API keys. Please select **Gemini 3.5 Flash Lite** from the model dropdown in the top-right corner.`
         : isThoughtSigError
@@ -531,6 +531,7 @@ async function respond(dot: Dot, prevId: string | null, input: ResponseInputItem
 
   let lastErr: unknown = null;
   let droppedStreams = 0;
+  let rateRetries = 0;
 
   for (let workerIdx = 0; workerIdx < candidateWorkers.length; workerIdx++) {
     const workerUrl = candidateWorkers[workerIdx];
@@ -593,6 +594,16 @@ async function respond(dot: Dot, prevId: string | null, input: ResponseInputItem
             conversationId: convId,
             text: `⚡ Cloudflare Worker (${workerUrl.replace(/^https?:\/\//, "")}) ${isNeuronExhausted ? "daily free 10k neuron limit reached" : "temporarily busy"}. Switching automatically to backup worker (${nextWorker.replace(/^https?:\/\//, "")})...`,
           });
+          continue;
+        }
+
+        // A per-minute token limit clears on its own: wait and ask again (20 s, 40 s, 60 s) before giving up or switching models.
+        if (!workerUrl && /429|rate limit|tokens per minute|itpm/i.test(errMsg) && rateRetries < 3 && !signal.aborted) {
+          rateRetries++;
+          console.warn(`[dots] Rate limited (${errMsg.slice(0, 160)}). Waiting ${20 * rateRetries}s, attempt ${rateRetries}/3...`);
+          repo.setActivity(dot.id, "Waiting for the model's rate limit");
+          await new Promise((r) => setTimeout(r, 20_000 * rateRetries));
+          workerIdx--;
           continue;
         }
 
@@ -703,6 +714,14 @@ async function respond(dot: Dot, prevId: string | null, input: ResponseInputItem
         });
         continue;
       }
+      if (!workerUrl && /429|rate limit|tokens per minute|itpm/i.test(sErrMsg) && !hasDeliveredText && rateRetries < 3 && !signal.aborted) {
+        rateRetries++;
+        console.warn(`[dots] Rate limited mid-stream (${sErrMsg.slice(0, 160)}). Waiting ${20 * rateRetries}s, attempt ${rateRetries}/3...`);
+        repo.setActivity(dot.id, "Waiting for the model's rate limit");
+        await new Promise((r) => setTimeout(r, 20_000 * rateRetries));
+        workerIdx--;
+        continue;
+      }
       throw streamError;
     }
 
@@ -747,14 +766,15 @@ function replayable(output: Response["output"]): ResponseInputItem[] {
 }
 
 /** Keep the replayed history bounded: drop the oldest turns, always cutting at a user message. */
-function trimHistory(all: ResponseInputItem[], maxItems = 80, maxChars = 100_000): ResponseInputItem[] {
-  // Old tool results are the bulk (whole page texts). Keep the start of each, so what was found earlier is still
-  // known on the next message ("try again") instead of the whole earlier run being cut away.
-  const lastUser = all.findLastIndex((it) => "role" in it && it.role === "user");
+function trimHistory(all: ResponseInputItem[], maxItems = 60, maxChars = 50_000): ResponseInputItem[] {
+  // Tool results are the bulk (whole page texts). Only the latest few stay whole; older ones keep their first part, so
+  // what was found earlier is still known ("try again") while every request stays small enough for per-minute token limits.
+  const outputs = all.flatMap((it, i) => ((it as { type?: string }).type === "function_call_output" ? [i] : []));
+  const keepWhole = new Set(outputs.slice(-3));
   const items = all.map((it, i) => {
     const o = it as { type?: string; output?: unknown };
-    return i < lastUser && o.type === "function_call_output" && typeof o.output === "string" && o.output.length > 3000
-      ? ({ ...it, output: `${o.output.slice(0, 3000)}…[clipped]` } as ResponseInputItem)
+    return o.type === "function_call_output" && !keepWhole.has(i) && typeof o.output === "string" && o.output.length > 1500
+      ? ({ ...it, output: `${o.output.slice(0, 1500)}…[clipped]` } as ResponseInputItem)
       : it;
   });
   const size = (list: ResponseInputItem[]) => JSON.stringify(list).length;
