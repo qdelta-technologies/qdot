@@ -375,6 +375,7 @@ async function drive(dot: Dot, prevId: string | null, input: ResponseInputItem[]
   // A run that resumes after an approval cannot see the calls from before the pause, so it is not checked.
   const ran: RunCall[] = [];
   let claimNudges = 0;
+  let emptyNudges = 0;
   const isResume = input.some((i) => (i as { type?: string }).type === "function_call_output");
   for (let step = 0; step < MAX_STEPS; step++) {
     signal.throwIfAborted();
@@ -403,6 +404,27 @@ async function drive(dot: Dot, prevId: string | null, input: ResponseInputItem[]
         const msgText = lastMsg && "content" in lastMsg && Array.isArray(lastMsg.content)
           ? lastMsg.content.map((c) => ("text" in c ? c.text : "")).join("")
           : "";
+        // The model stopped without saying anything (some models do this right after tool results): the run would end
+        // with no reply at all. Ask it to carry on or explain; if it stays silent, tell the user instead of going quiet.
+        if (!msgText.trim()) {
+          if (emptyNudges < 2) {
+            emptyNudges++;
+            input = [
+              {
+                role: "user",
+                content:
+                  "You stopped without replying. If the task is not finished, carry on with your tools now. If it is finished, or something is blocking you, tell me in plain words what you did and what happened.",
+              },
+            ];
+            prevId = resp.id;
+            continue;
+          }
+          repo.addMessage({
+            dotId: dot.id, role: "system", conversationId: conversationId,
+            text: 'The model stopped without a reply. Say "continue" to keep going, or switch to another model in the chat header.',
+          });
+          return;
+        }
         const isStalledPromise =
           /(?:please wait while I|let me proceed with|let me search for|searching for more information)/i.test(msgText) ||
           /(?:\*\s*\*\*Founder\*\*:\s*$\s*\*\s*\*\*Website\*\*:\s*$)/m.test(msgText);

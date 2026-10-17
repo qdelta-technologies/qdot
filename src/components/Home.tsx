@@ -115,7 +115,7 @@ export default function Home() {
           <div className="mt-8 w-full max-w-[640px] text-left">
             <div className="rounded-2xl border border-black/10 bg-card/95 p-3 pl-5 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.15)] transition-shadow focus-within:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.2)]">
               {listening && (
-                <DictationBar stream={dict.stream} heard={dict.heard} preview={text} onCancel={dict.cancel} onDone={dict.stop} onSend={() => void submit()} />
+                <DictationBar stream={dict.stream} heard={dict.heard} onCancel={dict.cancel} onDone={dict.stop} onSend={() => void submit()} />
               )}
               <textarea
                 ref={taRef}

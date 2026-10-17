@@ -72,29 +72,38 @@ export function DictationBars({ stream }: { stream: MediaStream | null }) {
   );
 }
 
-const WAVE = 56; // how many bars the scrolling wave holds
-
 /**
- * The recording bar shown while the mic is on: cancel, a wave that scrolls left as you speak, done, send.
+ * The recording bar shown while the mic is on: cancel, a wave that fills the bar and scrolls left as you speak, done, send.
+ * The words are not shown while recording: they appear in the box once you press done or send.
  * Enter sends and Escape cancels, so the keyboard works even though the text box is hidden meanwhile.
  */
 export function DictationBar({
   stream,
   heard,
-  preview,
   onCancel,
   onDone,
   onSend,
 }: {
   stream: MediaStream | null;
   heard: boolean;
-  preview: string;
   onCancel: () => void;
   onDone: () => void;
   onSend: () => void;
 }) {
   const bars = useRef<(HTMLSpanElement | null)[]>([]);
+  const waveRef = useRef<HTMLDivElement>(null);
+  const [count, setCount] = useState(48); // bars that fit across the wave (3px bar + 3px gap each)
   const [silent, setSilent] = useState(false);
+
+  useEffect(() => {
+    const el = waveRef.current;
+    if (!el) return;
+    const fit = () => setCount(Math.max(12, Math.floor((el.clientWidth - 8 + 3) / 6)));
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const handlers = useRef({ onCancel, onSend });
   useEffect(() => {
     handlers.current = { onCancel, onSend };
@@ -125,7 +134,7 @@ export function DictationBar({
   }, []);
 
   useEffect(() => {
-    const levels = new Array<number>(WAVE).fill(0);
+    const levels = new Array<number>(count).fill(0);
     const paint = () => {
       levels.forEach((lv, i) => {
         const el = bars.current[i];
@@ -169,22 +178,18 @@ export function DictationBar({
       clearInterval(timer);
       if (ctx && ctx.state !== "closed") void ctx.close().catch(() => {});
     };
-  }, [stream]);
+  }, [stream, count]);
 
   const round = "flex size-9 shrink-0 items-center justify-center rounded-full transition-all active:scale-95";
   return (
     <div className="flex w-full flex-col gap-1.5 py-0.5">
-      {(preview || silent) && (
-        <p className={`truncate px-3 text-[12.5px] ${heard ? "text-foreground/55" : "text-warning"}`}>
-          {heard ? `…${preview.slice(-90)}` : "I can't hear anything yet. Check that the right microphone is on."}
-        </p>
-      )}
+      {silent && !heard && <p className="truncate px-3 text-[12.5px] text-warning">I can&apos;t hear anything yet. Check that the right microphone is on.</p>}
       <div className="flex items-center gap-2">
         <button type="button" aria-label="Cancel dictation" title="Cancel (Esc)" onMouseDown={(e) => e.preventDefault()} onClick={onCancel} className={`${round} border border-black/10 text-foreground/70 hover:text-foreground dark:border-white/15`}>
           <X className="size-4" strokeWidth={2} />
         </button>
-        <div aria-hidden className="flex h-9 min-w-0 flex-1 items-center justify-end gap-[3px] overflow-hidden">
-          {Array.from({ length: WAVE }, (_, i) => (
+        <div ref={waveRef} aria-hidden className="flex h-9 min-w-0 flex-1 items-center justify-end gap-[3px] overflow-hidden px-1">
+          {Array.from({ length: count }, (_, i) => (
             <span key={i} ref={(el) => void (bars.current[i] = el)} className="w-[3px] shrink-0 rounded-full bg-foreground" style={{ height: 3, opacity: 0.3 }} />
           ))}
         </div>

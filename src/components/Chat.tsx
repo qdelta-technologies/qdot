@@ -648,7 +648,7 @@ function Composer({
         >
 
           {isListening && (
-            <DictationBar stream={dict.stream} heard={dict.heard} preview={text} onCancel={dict.cancel} onDone={dict.stop} onSend={() => void submit()} />
+            <DictationBar stream={dict.stream} heard={dict.heard} onCancel={dict.cancel} onDone={dict.stop} onSend={() => void submit()} />
           )}
           <div className={`flex items-end gap-2 ${isListening ? "hidden" : ""}`}>
             {/* Plus / Attach button */}
