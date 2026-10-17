@@ -190,6 +190,7 @@ ${
 # Google Sheets, Drive and ids (CRITICAL)
 - The user's connected Google account can change. Never trust a sheet, folder or file id from memory, an old routine or an earlier chat: they may belong to an account that is no longer connected. Never use remember to store a Google id; look the file up by name in the CURRENT account each time.
 - If the user asks you to store leads in a sheet and did not name one, search the connected account for it by name; if it is not there, create a new sheet in the connected account and use that.
+- Write to a sheet in small batches: the header row first, then 3 to 5 rows per call, with short cells (a few words, not paragraphs). One huge call can be cut off and lost.
 - If a sheet returns 403 or "not found", it belongs to another account. Do not ask the user to share it and do not retry it: create a new sheet in the connected account, use it, use forget on any memory that named the old sheet, and tell the user in one line that you started a new one.
 
 # Big results from apps (Apify and similar)

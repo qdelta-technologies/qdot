@@ -439,9 +439,14 @@ Account: your connected LinkedIn account`,
     describe: (a) => `save the lead ${s(a.name)}`,
     defaultDecision: () => "allow",
     execute: async (a, ctx) => {
+      // Models often send the word "null", "none" or "n/a" for a field that has no value: that is empty, not text.
+      const opt = (v: unknown) => {
+        const t = s(v).trim();
+        return /^(null|none|n\/a|na|undefined|unknown|not (?:available|provided|listed)|-+)$/i.test(t) ? "" : t;
+      };
       const r = leads.addLead(ctx.dot.id, {
-        name: s(a.name), headline: s(a.headline), company: s(a.company), location: s(a.location), email: s(a.email), phone: s(a.phone),
-        profileUrl: s(a.profile_url), sourceUrl: s(a.source_url), evidence: s(a.evidence), notes: s(a.notes),
+        name: s(a.name), headline: opt(a.headline), company: opt(a.company), location: opt(a.location), email: opt(a.email), phone: opt(a.phone),
+        profileUrl: s(a.profile_url), sourceUrl: opt(a.source_url), evidence: s(a.evidence), notes: opt(a.notes),
       });
       if (!r.ok) return `Not saved: ${r.reason}`;
       return r.duplicate ? `${r.lead.name} was already saved.` : `Saved ${r.lead.name}. ${leads.countLeads()} lead(s) in total.`;

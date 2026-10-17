@@ -515,7 +515,8 @@ async function respond(dot: Dot, prevId: string | null, input: ResponseInputItem
     tools.length = 0;
     tools.push(...kept);
   }
-  const maxOut = onGroq ? 1024 : 2048;
+  // Writing several leads into a sheet is one long tool call; 2048 tokens cut it off mid-way and the run died with "stream ended unexpectedly".
+  const maxOut = onGroq ? 1024 : isCloudflareModel(appModel) ? 2048 : 8192;
 
   // Stateless providers get the whole conversation every time; the app keeps it (trimmed) per chat.
   const history = stateless ? (repo.getHistory(dot.id) as ResponseInputItem[]) : [];
@@ -666,6 +667,10 @@ async function respond(dot: Dot, prevId: string | null, input: ResponseInputItem
           case "response.completed":
             final = ev.response;
             break;
+          case "response.incomplete":
+            // The model hit its output limit. Keep what it produced instead of reporting a dropped stream.
+            final = ev.response;
+            break;
           case "response.failed":
             throw new Error(ev.response.error?.message ?? "The model request failed");
           case "error":
@@ -742,7 +747,16 @@ function replayable(output: Response["output"]): ResponseInputItem[] {
 }
 
 /** Keep the replayed history bounded: drop the oldest turns, always cutting at a user message. */
-function trimHistory(items: ResponseInputItem[], maxItems = 24, maxChars = 32_000): ResponseInputItem[] {
+function trimHistory(all: ResponseInputItem[], maxItems = 80, maxChars = 100_000): ResponseInputItem[] {
+  // Old tool results are the bulk (whole page texts). Keep the start of each, so what was found earlier is still
+  // known on the next message ("try again") instead of the whole earlier run being cut away.
+  const lastUser = all.findLastIndex((it) => "role" in it && it.role === "user");
+  const items = all.map((it, i) => {
+    const o = it as { type?: string; output?: unknown };
+    return i < lastUser && o.type === "function_call_output" && typeof o.output === "string" && o.output.length > 3000
+      ? ({ ...it, output: `${o.output.slice(0, 3000)}…[clipped]` } as ResponseInputItem)
+      : it;
+  });
   const size = (list: ResponseInputItem[]) => JSON.stringify(list).length;
   let start = 0;
   while (items.length - start > maxItems || size(items.slice(start)) > maxChars) {
