@@ -370,7 +370,7 @@ async function turn(dotId: string, text: string, trigger: Trigger, signal: Abort
 
 async function drive(dot: Dot, prevId: string | null, input: ResponseInputItem[], trigger: Trigger, signal: AbortSignal, conversationId?: string | null) {
   const convId = conversationId ?? repo.currentConversation(dot.id);
-  const seenCalls = new Map<string, number>();
+  const seenCalls = new Map<string, { n: number; out: string }>();
   // What the dot really did in this run, so "done, the leads are saved" can be checked against it.
   // A run that resumes after an approval cannot see the calls from before the pause, so it is not checked.
   const ran: RunCall[] = [];
@@ -457,15 +457,15 @@ async function drive(dot: Dot, prevId: string | null, input: ResponseInputItem[]
       }
     }
     // A model stuck in a loop repeats the identical step; stop it instead of burning 60 steps (and claiming things it never did).
+    // "Identical" means the same call that gave the same result: checking a job's status again and again while it
+    // runs is normal polling (the result changes), not a loop.
     for (const c of calls) {
       if (c.type !== "function_call") continue;
-      const sig = `${c.name}|${c.arguments}`;
-      const n = (seenCalls.get(sig) ?? 0) + 1;
-      seenCalls.set(sig, n);
-      if (n >= 3) {
+      const seen = seenCalls.get(`${c.name}|${c.arguments}`);
+      if (seen && seen.n >= 3) {
         repo.addMessage({
           dotId: dot.id, role: "system", conversationId: conversationId,
-          text: `Stopped: it kept repeating the same step (${c.name}) without making progress. Nothing more was done in this run.`,
+          text: `Stopped: it kept repeating the same step (${c.name}) and getting the same result, without making progress. Nothing more was done in this run.`,
         });
         return;
       }
@@ -475,7 +475,11 @@ async function drive(dot: Dot, prevId: string | null, input: ResponseInputItem[]
     for (const c of calls) {
       if (c.type !== "function_call") continue;
       const out = pending.outputs.find((o) => (o as { call_id?: string }).call_id === c.call_id) as { output?: unknown } | undefined;
-      ran.push({ name: c.name, args: typeof c.arguments === "string" ? c.arguments : "", output: typeof out?.output === "string" ? out.output : "" });
+      const output = typeof out?.output === "string" ? out.output : "";
+      ran.push({ name: c.name, args: typeof c.arguments === "string" ? c.arguments : "", output });
+      const sig = `${c.name}|${c.arguments}`;
+      const prev = seenCalls.get(sig);
+      seenCalls.set(sig, prev && prev.out === output ? { n: prev.n + 1, out: output } : { n: 1, out: output });
     }
     prevId = resp.id;
     input = pending.outputs;

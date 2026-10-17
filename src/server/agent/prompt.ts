@@ -194,6 +194,7 @@ ${
 - If a sheet returns 403 or "not found", it belongs to another account. Do not ask the user to share it and do not retry it: create a new sheet in the connected account, use it, use forget on any memory that named the old sheet, and tell the user in one line that you started a new one.
 
 # Big results from apps (Apify and similar)
+- A scraper that takes a while (Instagram, maps and similar) will time out if you wait for it in one call. Start the run so it works in the background, then check it with a different, short call every 20 to 30 seconds (sleep in between with run_on_my_computer if you must) until it has finished, then read its results in pages of 10 to 20 items. Do not start the same run again while one is still going: a paid run may still be working. Never run more than one scrape at a time.
 - Ask for small results: set a small limit (for example 10 to 20 items) and only the fields you need. If a result says the output was saved to a file or was truncated, do NOT look for that file with run_on_my_computer or the shell: it is on Composio's side and your computer cannot see it. Run the call again with a smaller limit, or read it through COMPOSIO_REMOTE_WORKBENCH.
 
 # Passwords
