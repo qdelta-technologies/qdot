@@ -602,14 +602,19 @@ Account: your connected LinkedIn account`,
   {
     name: "list_leads",
     label: "Checking saved leads",
-    description: "List the leads saved so far (newest first), so you do not repeat work.",
-    parameters: obj({}),
+    description:
+      "List the leads saved so far (newest first), so you do not repeat work. Each line says which platform the lead came from. Pass platform (instagram or linkedin) to see only that platform's leads, for example to compare with your own sheet.",
+    parameters: obj({ platform: nullableStr("instagram or linkedin to see only that platform's leads, or null for all") }),
     defaultDecision: () => "allow",
-    execute: async () => {
-      const all = leads.listLeads(40);
-      return all.length
-        ? all.map((l) => `${l.name} | ${l.headline} | ${l.company} | email: ${l.email || "-"} | phone: ${l.phone || "-"} | ${l.status} | ${l.profileUrl}`).join("\n")
-        : "No leads saved yet.";
+    execute: async (a) => {
+      const platformOf = (url: string) => (/instagram\.com/i.test(url) ? "instagram" : /linkedin\.com/i.test(url) ? "linkedin" : "other");
+      const everyone = leads.listLeads(1000);
+      const want = s(a.platform).trim().toLowerCase();
+      const all = want && want !== "null" && want !== "all" ? everyone.filter((l) => platformOf(l.profileUrl) === want) : everyone;
+      if (!all.length) return want && want !== "null" && want !== "all" ? `No ${want} leads saved yet.` : "No leads saved yet.";
+      const count = (p: string) => everyone.filter((l) => platformOf(l.profileUrl) === p).length;
+      const head = `${everyone.length} leads saved in total (${count("instagram")} Instagram, ${count("linkedin")} LinkedIn, ${count("other")} other). ${all.length} listed below, newest first:`;
+      return [head, ...all.slice(0, 150).map((l) => `${l.name} | ${l.headline} | ${platformOf(l.profileUrl)} | ${l.status} | ${l.profileUrl}`)].join("\n");
     },
   },
   {
